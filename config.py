@@ -9,6 +9,7 @@ class TradingConfig:
     # Exchange & Authentication
     bybit_api_key: str = os.getenv("BYBIT_API_KEY", "")
     bybit_api_secret: str = os.getenv("BYBIT_API_SECRET", "")
+    bybit_private_key_path: str = os.getenv("BYBIT_API_PRIVATE_KEY_PATH", "")
     testnet: bool = os.getenv("TESTNET", "false").lower() == "true"
     paper_trading: bool = os.getenv("PAPER_TRADING", "true").lower() == "true"
 

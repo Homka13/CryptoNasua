@@ -1,3 +1,4 @@
+import os
 import time
 import logging
 import asyncio
@@ -68,9 +69,19 @@ class ExchangeService:
     def __init__(self):
         self.is_paper = config.paper_trading
         
+        secret_val = config.bybit_api_secret
+        if config.bybit_private_key_path and os.path.exists(config.bybit_private_key_path):
+            with open(config.bybit_private_key_path, 'r', encoding='utf-8') as f:
+                secret_val = f.read()
+            logger.info("🔑 Bybit RSA Private Key loaded for API authentication.")
+        elif os.path.exists("bybit_rsa_private.pem") and not secret_val:
+            with open("bybit_rsa_private.pem", 'r', encoding='utf-8') as f:
+                secret_val = f.read()
+            logger.info("🔑 Bybit RSA Private Key loaded from bybit_rsa_private.pem")
+
         exchange_params = {
             'apiKey': config.bybit_api_key,
-            'secret': config.bybit_api_secret,
+            'secret': secret_val,
             'enableRateLimit': True,
             'options': {
                 'defaultType': 'spot'
