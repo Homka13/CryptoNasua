@@ -27,6 +27,7 @@ A technical trading system triggered a BUY candidate signal for {symbol} on {tim
 
 Technical Context:
 - Signal Trigger: {initial_reason}
+- Operating Mode: {config.trading_mode_display}
 - Current Price: ${metadata.get('price', 0)}
 - RSI (14): {metadata.get('rsi', 0):.2f}
 - Fast EMA (20): ${metadata.get('ema_fast', 0)}
@@ -99,10 +100,21 @@ Respond strictly in valid JSON format:
         parsed = json.loads(cleaned)
         decision = parsed.get("decision", "CONFIRM").upper()
         reason = parsed.get("reason", "No reason provided")
-        confidence = parsed.get("confidence", 1.0)
+        confidence = float(parsed.get("confidence", 1.0))
+        min_required = config.min_llm_confidence
 
-        is_confirmed = (decision == "CONFIRM")
-        explanation = f"LLM Verdict: {decision} (Confidence: {confidence*100:.0f}%) - {reason}"
+        if decision == "CONFIRM" and confidence < min_required:
+            is_confirmed = False
+            explanation = (
+                f"LLM Verdict: REJECTED by [{config.trading_mode_display}] "
+                f"(Confidence {confidence*100:.0f}% < required {min_required*100:.0f}%) - {reason}"
+            )
+        else:
+            is_confirmed = (decision == "CONFIRM")
+            explanation = (
+                f"LLM Verdict: {decision} [{config.trading_mode.upper()} mode] "
+                f"(Confidence: {confidence*100:.0f}%, Min Req: {min_required*100:.0f}%) - {reason}"
+            )
         
         logger.info(f"🧠 [LLM ANALYST]: {explanation}")
         return is_confirmed, explanation

@@ -26,6 +26,17 @@ class TradingConfig:
     use_llm_confirmation: bool = os.getenv("USE_LLM_CONFIRMATION", "false").lower() == "true"
     llm_api_key: str = os.getenv("LLM_API_KEY", "")
     llm_provider: str = os.getenv("LLM_PROVIDER", "gemini").lower()  # gemini or openai
+    trading_mode: str = os.getenv("TRADING_MODE", "chill").lower()  # chill (sniper 90%) or hunt (aggressor 60%)
+
+    @property
+    def min_llm_confidence(self) -> float:
+        return 0.90 if self.trading_mode == "chill" else 0.60
+
+    @property
+    def trading_mode_display(self) -> str:
+        if self.trading_mode == "chill":
+            return "🦝 CHILL (Sniper - 90%+ confidence)"
+        return "🔥 HUNT (Aggressor - 60%+ confidence)"
 
     # Capital & Market Settings
     symbol: str = os.getenv("SYMBOL", "SOL/USDT")
@@ -48,5 +59,13 @@ class TradingConfig:
     ema_slow: int = 50
     grid_levels: int = 3
     grid_step_pct: float = 0.01  # 1% price step between grid levels
+
+    # Quant Execution Algorithms (Anti-Slippage & Smart Slicing)
+    use_limit_offset: bool = True
+    limit_offset_pct: float = 0.0015   # 0.15% limit price offset tolerance
+    max_slippage_pct: float = 0.0020   # 0.20% max allowed orderbook VWAP slippage
+    use_iceberg: bool = True
+    iceberg_slices: int = 3            # Slice order into 3 equal parts
+    iceberg_delay_sec: float = 5.0     # 5-second interval between iceberg slices
 
 config = TradingConfig()

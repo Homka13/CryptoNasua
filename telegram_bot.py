@@ -32,6 +32,7 @@ class TelegramInterface:
         self.app.add_handler(CommandHandler("start", self._cmd_start))
         self.app.add_handler(CommandHandler("status", self._cmd_status))
         self.app.add_handler(CommandHandler("balance", self._cmd_balance))
+        self.app.add_handler(CommandHandler("mode", self._cmd_mode))
         self.app.add_handler(CommandHandler("stop", self._cmd_stop))
         self.app.add_handler(CallbackQueryHandler(self._handle_callback))
 
@@ -55,6 +56,10 @@ class TelegramInterface:
                 InlineKeyboardButton("💰 Balance", callback_data="balance")
             ],
             [
+                InlineKeyboardButton("🦝 Chill Mode (90%)", callback_data="mode_chill"),
+                InlineKeyboardButton("🔥 Hunt Mode (60%)", callback_data="mode_hunt")
+            ],
+            [
                 InlineKeyboardButton("🛑 Pause Bot", callback_data="pause"),
                 InlineKeyboardButton("▶️ Resume Bot", callback_data="resume")
             ]
@@ -62,9 +67,9 @@ class TelegramInterface:
         reply_markup = InlineKeyboardMarkup(keyboard)
         await update.message.reply_text(
             f"🤖 *Bybit Crypto Trading Bot ($10 Capital)*\n\n"
-            f"• Mode: `{'PAPER TRADING (Dry-Run)' if config.paper_trading else 'LIVE TRADING'}`\n"
-            f"• Pair: `{config.symbol}`\n"
-            f"• Timeframe: `{config.timeframe}`\n"
+            f"• Execution: `{'PAPER TRADING' if config.paper_trading else 'LIVE TRADING'}`\n"
+            f"• Trading Style: `{config.trading_mode_display}`\n"
+            f"• Pair: `{config.symbol}` ({config.timeframe})\n"
             f"• Trade Size: `${config.trade_size_usdt}`\n\n"
             f"Use the buttons below or commands to control the bot:",
             parse_mode="Markdown",
@@ -82,6 +87,19 @@ class TelegramInterface:
         if not self._is_authorized(update):
             return
         msg = self._build_balance_msg()
+        if update.message:
+            await update.message.reply_text(msg, parse_mode="Markdown")
+
+    async def _cmd_mode(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        if not self._is_authorized(update):
+            return
+        if config.trading_mode == "chill":
+            config.trading_mode = "hunt"
+        else:
+            config.trading_mode = "chill"
+        
+        msg = f"⚙️ *Trading Style Mode Switched*:\n`{config.trading_mode_display}`"
+        logger.info(f"Telegram user changed mode to: {config.trading_mode}")
         if update.message:
             await update.message.reply_text(msg, parse_mode="Markdown")
 
@@ -103,6 +121,20 @@ class TelegramInterface:
             await query.edit_message_text(self._build_status_msg(), parse_mode="Markdown")
         elif query.data == "balance":
             await query.edit_message_text(self._build_balance_msg(), parse_mode="Markdown")
+        elif query.data == "mode_chill":
+            config.trading_mode = "chill"
+            logger.info("Trading mode changed to CHILL via Telegram button")
+            await query.edit_message_text(
+                f"🦝 *Mode set to CHILL (Sniper)*\n• Min LLM Confidence: `90%`\n• 1-3 high conviction trades/day",
+                parse_mode="Markdown"
+            )
+        elif query.data == "mode_hunt":
+            config.trading_mode = "hunt"
+            logger.info("Trading mode changed to HUNT via Telegram button")
+            await query.edit_message_text(
+                f"🔥 *Mode set to HUNT (Aggressor)*\n• Min LLM Confidence: `60%`\n• 10-15 trades/day for strong trends",
+                parse_mode="Markdown"
+            )
         elif query.data == "pause":
             self.is_active = False
             await query.edit_message_text("🛑 *Bot trading paused.* Use /start to resume.", parse_mode="Markdown")

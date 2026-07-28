@@ -60,15 +60,15 @@
             </div>
 
             <div class="glass-card stat-card">
-                <div class="stat-label">RSI (14) & Тренд</div>
-                <div id="stat-rsi-trend" class="stat-value">RSI: 50.0</div>
-                <div id="stat-ema" class="stat-sub">EMA 20/50: --</div>
+                <div class="stat-label">Стиль Торгівлі</div>
+                <div id="stat-trading-mode" class="stat-value">🦝 CHILL (90%)</div>
+                <div id="stat-trading-mode-sub" class="stat-sub">Снайпер: 1-3 ідеальні угоди/день</div>
             </div>
 
             <div class="glass-card stat-card">
                 <div class="stat-label">ШІ-Фільтр (LLM Sentinel)</div>
                 <div id="stat-llm-status" class="stat-value text-green">АКТИВНИЙ (GEMINI)</div>
-                <div class="stat-sub">Захист від пробоїв</div>
+                <div id="stat-llm-sub" class="stat-sub">Захист від пробоїв</div>
             </div>
         </section>
 
@@ -94,6 +94,14 @@
                     <div class="control-row">
                         <span>Режим торгівлі:</span>
                         <button id="toggle-mode-btn" class="btn btn-warning">Переключити на LIVE</button>
+                    </div>
+
+                    <div class="control-row">
+                        <span>Стиль торгівлі (LLM):</span>
+                        <div class="mode-btn-group">
+                            <button id="btn-mode-chill" class="btn-mode active-chill">🦝 Chill (90%)</button>
+                            <button id="btn-mode-hunt" class="btn-mode">🔥 Hunt (60%)</button>
+                        </div>
                     </div>
 
                     <div class="control-row">

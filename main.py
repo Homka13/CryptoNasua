@@ -53,7 +53,8 @@ class TradingBot:
 
         return (
             f"📊 *BYBIT BOT STATUS*\n"
-            f"• Mode: `{'PAPER TRADING' if config.paper_trading else 'LIVE'}`\n"
+            f"• Execution: `{'PAPER TRADING' if config.paper_trading else 'LIVE'}`\n"
+            f"• Style Mode: `{config.trading_mode_display}`\n"
             f"• Symbol: `{config.symbol}` ({config.timeframe})\n"
             f"• Last Price: `${price:.2f}`\n"
             f"• RSI (14): `{rsi:.1f}`\n"
@@ -80,7 +81,8 @@ class TradingBot:
         logger.info("🚀 Starting Bybit Trading Bot loop...")
         await self.telegram.send_alert(
             f"🚀 *Trading Bot Started!*\n"
-            f"Mode: `{'PAPER TRADING' if config.paper_trading else 'LIVE'}`\n"
+            f"Execution: `{'PAPER TRADING' if config.paper_trading else 'LIVE'}`\n"
+            f"Style Mode: `{config.trading_mode_display}`\n"
             f"Capital: `${config.initial_capital:.2f}`\n"
             f"Pair: `{config.symbol}` ({config.timeframe})\n"
             f"LLM Filter: `{'ENABLED' if config.use_llm_confirmation else 'DISABLED'}`"
@@ -120,20 +122,21 @@ class TradingBot:
                         )
 
                         if is_allowed:
-                            logger.info(f"Executing BUY: {risk_reason}")
-                            order = self.exchange.create_spot_order('buy', amount, meta['price'])
+                            logger.info(f"Executing BUY via Quant Engine: {risk_reason}")
+                            orders = await self.exchange.execute_smart_order('buy', amount, meta['price'])
                             
                             self.current_position = {
                                 'entry_price': meta['price'],
                                 'amount': amount,
-                                'order_id': order.get('id')
+                                'order_id': orders[0].get('id') if orders else 'N/A'
                             }
                             
                             await self.telegram.send_alert(
-                                f"🟢 *BUY ORDER EXECUTED*\n"
+                                f"🟢 *BUY ORDER EXECUTED (Quant Engine)*\n"
                                 f"• Pair: `{config.symbol}`\n"
                                 f"• Price: `${meta['price']:.2f}`\n"
                                 f"• Amount: `{amount:.4f}`\n"
+                                f"• Execution: `Limit Offset + Iceberg ({config.iceberg_slices} slices)`\n"
                                 f"• Strategy Reason: {reason}\n"
                                 f"• {llm_reason}"
                             )
@@ -147,14 +150,15 @@ class TradingBot:
                     curr_p = meta['price']
                     pnl_pct = ((curr_p - entry_p) / entry_p) * 100
 
-                    logger.info(f"Executing SELL ({amount:.4f} coins @ ${curr_p:.2f}). Reason: {reason}")
-                    self.exchange.create_spot_order('sell', amount, curr_p)
+                    logger.info(f"Executing SELL via Quant Engine ({amount:.4f} coins @ ${curr_p:.2f}). Reason: {reason}")
+                    await self.exchange.execute_smart_order('sell', amount, curr_p)
                     
                     await self.telegram.send_alert(
-                        f"🔴 *SELL ORDER EXECUTED*\n"
+                        f"🔴 *SELL ORDER EXECUTED (Quant Engine)*\n"
                         f"• Pair: `{config.symbol}`\n"
                         f"• Exit Price: `${curr_p:.2f}` (Entry: `${entry_p:.2f}`)\n"
                         f"• PnL: `{pnl_pct:+.2f}%`\n"
+                        f"• Execution: `Limit Offset + Iceberg`\n"
                         f"• Reason: {reason}"
                     )
                     self.current_position = None

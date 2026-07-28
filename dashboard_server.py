@@ -105,6 +105,9 @@ class DashboardServer:
             'usdt_balance': usdt_free,
             'llm_enabled': config.use_llm_confirmation,
             'llm_provider': config.llm_provider.upper(),
+            'trading_mode': config.trading_mode,
+            'trading_mode_display': config.trading_mode_display,
+            'min_llm_confidence': config.min_llm_confidence,
             'active_position': self.bot.current_position
         }
         return web.json_response(payload)
@@ -139,6 +142,21 @@ class DashboardServer:
                 config.paper_trading = not config.paper_trading
                 self.bot.exchange.is_paper = config.paper_trading
                 return web.json_response({'success': True, 'paper_trading': config.paper_trading})
+            elif action == 'set_trading_mode':
+                new_mode = body.get('mode', 'chill').lower()
+                if new_mode in ('chill', 'hunt'):
+                    config.trading_mode = new_mode
+                    asyncio.create_task(self.bot.telegram.send_alert(
+                        f"🌐 *Web Dashboard updated Trading Style Mode*:\n`{config.trading_mode_display}`"
+                    ))
+                    return web.json_response({'success': True, 'trading_mode': config.trading_mode, 'display': config.trading_mode_display})
+                return web.json_response({'success': False, 'error': 'Invalid trading mode'}, status=400)
+            elif action == 'toggle_trading_mode':
+                config.trading_mode = 'hunt' if config.trading_mode == 'chill' else 'chill'
+                asyncio.create_task(self.bot.telegram.send_alert(
+                    f"🌐 *Web Dashboard toggled Trading Style Mode*:\n`{config.trading_mode_display}`"
+                ))
+                return web.json_response({'success': True, 'trading_mode': config.trading_mode, 'display': config.trading_mode_display})
             elif action == 'change_symbol':
                 new_symbol = body.get('symbol', 'SOL/USDT')
                 config.symbol = new_symbol

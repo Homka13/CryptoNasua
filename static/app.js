@@ -92,9 +92,25 @@ document.addEventListener('DOMContentLoaded', () => {
             document.getElementById('stat-balance').innerText = `$${data.usdt_balance.toFixed(2)} USDT`;
             document.getElementById('stat-symbol-price').innerText = `${data.symbol} $${data.current_price.toFixed(4)}`;
             document.getElementById('stat-timeframe').innerText = `Таймфрейм: ${data.timeframe}`;
-            document.getElementById('stat-rsi-trend').innerText = `RSI: ${data.rsi.toFixed(1)} (${data.trend})`;
-            document.getElementById('stat-ema').innerText = `EMA 20: $${data.ema_fast.toFixed(4)} | EMA 50: $${data.ema_slow.toFixed(4)}`;
             
+            // Trading mode stat & buttons
+            const modeElem = document.getElementById('stat-trading-mode');
+            const modeSubElem = document.getElementById('stat-trading-mode-sub');
+            const btnChill = document.getElementById('btn-mode-chill');
+            const btnHunt = document.getElementById('btn-mode-hunt');
+
+            if (data.trading_mode === 'chill') {
+                if (modeElem) modeElem.innerText = '🦝 CHILL (90%)';
+                if (modeSubElem) modeSubElem.innerText = 'Снайпер: 1-3 ідеальні угоди/день';
+                if (btnChill) btnChill.className = 'btn-mode active-chill';
+                if (btnHunt) btnHunt.className = 'btn-mode';
+            } else {
+                if (modeElem) modeElem.innerText = '🔥 HUNT (60%)';
+                if (modeSubElem) modeSubElem.innerText = 'Агресор: 10-15 угод на тренді';
+                if (btnChill) btnChill.className = 'btn-mode';
+                if (btnHunt) btnHunt.className = 'btn-mode active-hunt';
+            }
+
             const llmElem = document.getElementById('stat-llm-status');
             if (data.llm_enabled) {
                 llmElem.innerText = `АКТИВНИЙ (${data.llm_provider})`;
@@ -199,6 +215,24 @@ document.addEventListener('DOMContentLoaded', () => {
             });
             fetchStatus();
         }
+    });
+
+    document.getElementById('btn-mode-chill').addEventListener('click', async () => {
+        await fetch('/api/control', {
+            method: 'POST',
+            headers: { 'Authorization': `Bearer ${authToken}`, 'Content-Type': 'application/json' },
+            body: JSON.stringify({ action: 'set_trading_mode', mode: 'chill' })
+        });
+        fetchStatus();
+    });
+
+    document.getElementById('btn-mode-hunt').addEventListener('click', async () => {
+        await fetch('/api/control', {
+            method: 'POST',
+            headers: { 'Authorization': `Bearer ${authToken}`, 'Content-Type': 'application/json' },
+            body: JSON.stringify({ action: 'set_trading_mode', mode: 'hunt' })
+        });
+        fetchStatus();
     });
 
     document.getElementById('symbol-select').addEventListener('change', async (e) => {

@@ -249,3 +249,32 @@ body.dark-theme {
 
 .alert-danger { background: rgba(239, 68, 68, 0.2); color: var(--accent-red); border: 1px solid var(--accent-red); }
 .hidden { display: none !important; }
+
+/* Mode Button Group */
+.mode-btn-group {
+    display: flex;
+    gap: 8px;
+}
+.btn-mode {
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    color: var(--text-muted);
+    padding: 6px 12px;
+    border-radius: 8px;
+    font-size: 0.85rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+.btn-mode.active-chill {
+    background: rgba(59, 130, 246, 0.25);
+    border-color: var(--accent-blue);
+    color: #60a5fa;
+    box-shadow: 0 0 10px rgba(59, 130, 246, 0.3);
+}
+.btn-mode.active-hunt {
+    background: rgba(239, 68, 68, 0.25);
+    border-color: var(--accent-red);
+    color: #f87171;
+    box-shadow: 0 0 10px rgba(239, 68, 68, 0.3);
+}
