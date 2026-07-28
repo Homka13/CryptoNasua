@@ -31,6 +31,10 @@ ENV/
 .env.local
 .env.*.local
 *.pem
+*.key
+*.der
+*.crt
+bybit_rsa_*
 
 # IDEs & Editors
 .vscode/
