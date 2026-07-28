@@ -7,20 +7,21 @@ from config import config
 logger = logging.getLogger(__name__)
 
 class LLMAnalyst:
-    """Uses LLM API (Gemini / OpenAI / OpenRouter) to evaluate candidate trading setups."""
+    """Uses LLM API (Gemini / OpenAI / DeepSeek) to evaluate candidate trading setups."""
 
     def __init__(self):
         self.enabled = config.use_llm_confirmation
-        self.api_key = config.llm_api_key
-        self.provider = config.llm_provider.lower()
 
     async def evaluate_trade_signal(self, symbol: str, timeframe: str, metadata: Dict[str, Any], initial_reason: str) -> Tuple[bool, str]:
         """
         Queries LLM API to confirm or reject a technical BUY signal.
         Returns: (is_confirmed: bool, llm_explanation: str)
         """
-        if not self.enabled or not self.api_key:
-            return True, "LLM filter disabled (Defaulting to technical signal)"
+        provider = config.llm_provider.lower()
+        api_key = config.deepseek_api_key if provider == "deepseek" else config.llm_api_key
+
+        if not self.enabled or not api_key:
+            return True, "LLM filter disabled or API key missing (Defaulting to technical signal)"
 
         prompt = f"""You are a senior quantitative crypto trader protecting a small $10 capital account.
 A technical trading system triggered a BUY candidate signal for {symbol} on {timeframe} timeframe.
@@ -44,16 +45,18 @@ Respond strictly in valid JSON format:
 """
 
         try:
-            if self.provider == "gemini":
-                return await self._query_gemini(prompt)
+            if provider == "gemini":
+                return await self._query_gemini(prompt, api_key)
+            elif provider == "deepseek":
+                return await self._query_deepseek(prompt, api_key)
             else:
-                return await self._query_openai(prompt)
+                return await self._query_openai(prompt, api_key)
         except Exception as e:
-            logger.error(f"LLM Analyst query failed: {e}. Falling back to technical signal.")
+            logger.error(f"LLM Analyst ({provider.upper()}) query failed: {e}. Falling back to technical signal.")
             return True, f"LLM query error fallback: {e}"
 
-    async def _query_gemini(self, prompt: str) -> Tuple[bool, str]:
-        url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={self.api_key}"
+    async def _query_gemini(self, prompt: str, api_key: str) -> Tuple[bool, str]:
+        url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={api_key}"
         payload = {
             "contents": [{"parts": [{"text": prompt}]}]
         }
@@ -68,10 +71,33 @@ Respond strictly in valid JSON format:
                 content_text = data['candidates'][0]['content']['parts'][0]['text']
                 return self._parse_json_verdict(content_text)
 
-    async def _query_openai(self, prompt: str) -> Tuple[bool, str]:
+    async def _query_deepseek(self, prompt: str, api_key: str) -> Tuple[bool, str]:
+        url = "https://api.deepseek.com/chat/completions"
+        headers = {
+            "Authorization": f"Bearer {api_key}",
+            "Content-Type": "application/json"
+        }
+        payload = {
+            "model": config.deepseek_model,
+            "messages": [{"role": "user", "content": prompt}],
+            "temperature": 0.2,
+            "response_format": {"type": "json_object"}
+        }
+
+        async with aiohttp.ClientSession() as session:
+            async with session.post(url, headers=headers, json=payload, timeout=aiohttp.ClientTimeout(total=10)) as response:
+                if response.status != 200:
+                    text = await response.text()
+                    raise Exception(f"DeepSeek API status {response.status}: {text[:100]}")
+
+                data = await response.json()
+                content_text = data['choices'][0]['message']['content']
+                return self._parse_json_verdict(content_text)
+
+    async def _query_openai(self, prompt: str, api_key: str) -> Tuple[bool, str]:
         url = "https://api.openai.com/v1/chat/completions"
         headers = {
-            "Authorization": f"Bearer {self.api_key}",
+            "Authorization": f"Bearer {api_key}",
             "Content-Type": "application/json"
         }
         payload = {

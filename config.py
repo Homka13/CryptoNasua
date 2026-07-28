@@ -22,10 +22,12 @@ class TradingConfig:
     jwt_secret: str = os.getenv("JWT_SECRET", "super-secret-crypto-bot-key-2026")
     dashboard_port: int = int(os.getenv("DASHBOARD_PORT", "5000"))
 
-    # LLM Confirmation Filter (Gemini / OpenAI / OpenRouter)
+    # LLM Confirmation Filter (Gemini / OpenAI / DeepSeek / OpenRouter)
     use_llm_confirmation: bool = os.getenv("USE_LLM_CONFIRMATION", "false").lower() == "true"
     llm_api_key: str = os.getenv("LLM_API_KEY", "")
-    llm_provider: str = os.getenv("LLM_PROVIDER", "gemini").lower()  # gemini or openai
+    llm_provider: str = os.getenv("LLM_PROVIDER", "gemini").lower()  # gemini, openai, deepseek
+    deepseek_api_key: str = os.getenv("DEEPSEEK_API_KEY", os.getenv("LLM_API_KEY", ""))
+    deepseek_model: str = os.getenv("DEEPSEEK_MODEL", "deepseek-chat")
     trading_mode: str = os.getenv("TRADING_MODE", "chill").lower()  # chill (sniper 90%) or hunt (aggressor 60%)
 
     @property

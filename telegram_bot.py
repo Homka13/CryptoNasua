@@ -33,6 +33,7 @@ class TelegramInterface:
         self.app.add_handler(CommandHandler("status", self._cmd_status))
         self.app.add_handler(CommandHandler("balance", self._cmd_balance))
         self.app.add_handler(CommandHandler("mode", self._cmd_mode))
+        self.app.add_handler(CommandHandler("provider", self._cmd_provider))
         self.app.add_handler(CommandHandler("stop", self._cmd_stop))
         self.app.add_handler(CallbackQueryHandler(self._handle_callback))
 
@@ -60,6 +61,11 @@ class TelegramInterface:
                 InlineKeyboardButton("🔥 Hunt Mode (60%)", callback_data="mode_hunt")
             ],
             [
+                InlineKeyboardButton("🤖 DeepSeek", callback_data="provider_deepseek"),
+                InlineKeyboardButton("💎 Gemini", callback_data="provider_gemini"),
+                InlineKeyboardButton("🧠 OpenAI", callback_data="provider_openai")
+            ],
+            [
                 InlineKeyboardButton("🛑 Pause Bot", callback_data="pause"),
                 InlineKeyboardButton("▶️ Resume Bot", callback_data="resume")
             ]
@@ -69,6 +75,7 @@ class TelegramInterface:
             f"🤖 *Bybit Crypto Trading Bot ($10 Capital)*\n\n"
             f"• Execution: `{'PAPER TRADING' if config.paper_trading else 'LIVE TRADING'}`\n"
             f"• Trading Style: `{config.trading_mode_display}`\n"
+            f"• LLM Provider: `{config.llm_provider.upper()}`\n"
             f"• Pair: `{config.symbol}` ({config.timeframe})\n"
             f"• Trade Size: `${config.trade_size_usdt}`\n\n"
             f"Use the buttons below or commands to control the bot:",
@@ -103,6 +110,24 @@ class TelegramInterface:
         if update.message:
             await update.message.reply_text(msg, parse_mode="Markdown")
 
+    async def _cmd_provider(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        if not self._is_authorized(update):
+            return
+        keyboard = [
+            [
+                InlineKeyboardButton("🤖 DeepSeek-V3", callback_data="provider_deepseek"),
+                InlineKeyboardButton("💎 Gemini 1.5", callback_data="provider_gemini"),
+                InlineKeyboardButton("🧠 GPT-4o-mini", callback_data="provider_openai")
+            ]
+        ]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        if update.message:
+            await update.message.reply_text(
+                f"🧠 *Select LLM Provider*\nCurrent: `{config.llm_provider.upper()}`",
+                parse_mode="Markdown",
+                reply_markup=reply_markup
+            )
+
     async def _cmd_stop(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         if not self._is_authorized(update):
             return
@@ -135,6 +160,18 @@ class TelegramInterface:
                 f"🔥 *Mode set to HUNT (Aggressor)*\n• Min LLM Confidence: `60%`\n• 10-15 trades/day for strong trends",
                 parse_mode="Markdown"
             )
+        elif query.data == "provider_deepseek":
+            config.llm_provider = "deepseek"
+            await query.edit_message_text(
+                f"🤖 *LLM Sentinel set to DEEPSEEK*\nModel: `{config.deepseek_model}` (Ultra low cost & high reasoning)",
+                parse_mode="Markdown"
+            )
+        elif query.data == "provider_gemini":
+            config.llm_provider = "gemini"
+            await query.edit_message_text(f"💎 *LLM Sentinel set to GEMINI*", parse_mode="Markdown")
+        elif query.data == "provider_openai":
+            config.llm_provider = "openai"
+            await query.edit_message_text(f"🧠 *LLM Sentinel set to OPENAI (GPT-4o-mini)*", parse_mode="Markdown")
         elif query.data == "pause":
             self.is_active = False
             await query.edit_message_text("🛑 *Bot trading paused.* Use /start to resume.", parse_mode="Markdown")

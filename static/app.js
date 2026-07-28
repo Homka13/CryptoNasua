@@ -112,12 +112,16 @@ document.addEventListener('DOMContentLoaded', () => {
             }
 
             const llmElem = document.getElementById('stat-llm-status');
+            const providerSelect = document.getElementById('provider-select');
             if (data.llm_enabled) {
                 llmElem.innerText = `АКТИВНИЙ (${data.llm_provider})`;
                 llmElem.className = 'stat-value text-green';
             } else {
                 llmElem.innerText = 'ВИМКНЕНО';
                 llmElem.className = 'stat-value text-red';
+            }
+            if (providerSelect && data.llm_provider) {
+                providerSelect.value = data.llm_provider.toLowerCase();
             }
 
             // Mode badge
@@ -231,6 +235,16 @@ document.addEventListener('DOMContentLoaded', () => {
             method: 'POST',
             headers: { 'Authorization': `Bearer ${authToken}`, 'Content-Type': 'application/json' },
             body: JSON.stringify({ action: 'set_trading_mode', mode: 'hunt' })
+        });
+        fetchStatus();
+    });
+
+    document.getElementById('provider-select').addEventListener('change', async (e) => {
+        const provider = e.target.value;
+        await fetch('/api/control', {
+            method: 'POST',
+            headers: { 'Authorization': `Bearer ${authToken}`, 'Content-Type': 'application/json' },
+            body: JSON.stringify({ action: 'set_llm_provider', provider })
         });
         fetchStatus();
     });

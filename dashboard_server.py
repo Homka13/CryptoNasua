@@ -161,6 +161,15 @@ class DashboardServer:
                 new_symbol = body.get('symbol', 'SOL/USDT')
                 config.symbol = new_symbol
                 return web.json_response({'success': True, 'symbol': new_symbol})
+            elif action == 'set_llm_provider':
+                new_provider = body.get('provider', 'gemini').lower()
+                if new_provider in ('gemini', 'openai', 'deepseek'):
+                    config.llm_provider = new_provider
+                    asyncio.create_task(self.bot.telegram.send_alert(
+                        f"🤖 *LLM Sentinel Provider Switched*: `{config.llm_provider.upper()}`"
+                    ))
+                    return web.json_response({'success': True, 'llm_provider': config.llm_provider.upper()})
+                return web.json_response({'success': False, 'error': 'Invalid provider'}, status=400)
 
             return web.json_response({'success': False, 'error': 'Unknown action'}, status=400)
         except Exception as e:
