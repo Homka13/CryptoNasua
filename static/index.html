@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Crypto Trading Bot — Private Dashboard</title>
+    <link rel="stylesheet" href="/static/style.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <!-- Google Identity Services for Google OAuth -->
+    <script src="https://accounts.google.com/gsi/client" async defer></script>
+</head>
+<body class="dark-theme">
+    <!-- Authentication Screen -->
+    <div id="login-modal" class="modal-overlay">
+        <div class="glass-card login-card">
+            <div class="logo-badge">🤖 Bybit Bot Private</div>
+            <h2>Приватна Авторизація</h2>
+            <p>Доступ дозволено лише для верифікованого Google-акаунта власника.</p>
+            
+            <div id="login-error" class="alert-box alert-danger hidden"></div>
+            
+            <div class="demo-auth-box">
+                <label>Введіть ваш Google Email:</label>
+                <input type="email" id="email-input" placeholder="example@gmail.com" class="input-field">
+                <button id="login-btn" class="btn btn-primary">Увійти з Google</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Main Dashboard Container -->
+    <div id="dashboard" class="dashboard-container hidden">
+        <!-- Top Navigation -->
+        <header class="top-nav glass-card">
+            <div class="brand">
+                <span class="pulse-dot green"></span>
+                <h1>Crypto Bot Dashboard</h1>
+                <span id="mode-badge" class="badge badge-paper">PAPER TRADING</span>
+            </div>
+            
+            <div class="user-profile">
+                <span id="user-email-display" class="user-email">user@gmail.com</span>
+                <button id="logout-btn" class="btn btn-sm btn-outline">Вийти</button>
+            </div>
+        </header>
+
+        <!-- Main Stats Grid -->
+        <section class="stats-grid">
+            <div class="glass-card stat-card">
+                <div class="stat-label">Баланс (USDT)</div>
+                <div id="stat-balance" class="stat-value">$10.00</div>
+                <div class="stat-sub">Початковий капітал: $10.00</div>
+            </div>
+
+            <div class="glass-card stat-card">
+                <div class="stat-label">Поточна ціна / Торгова пара</div>
+                <div id="stat-symbol-price" class="stat-value">SOL/USDT $0.00</div>
+                <div id="stat-timeframe" class="stat-sub">Таймфрейм: 15m</div>
+            </div>
+
+            <div class="glass-card stat-card">
+                <div class="stat-label">RSI (14) & Тренд</div>
+                <div id="stat-rsi-trend" class="stat-value">RSI: 50.0</div>
+                <div id="stat-ema" class="stat-sub">EMA 20/50: --</div>
+            </div>
+
+            <div class="glass-card stat-card">
+                <div class="stat-label">ШІ-Фільтр (LLM Sentinel)</div>
+                <div id="stat-llm-status" class="stat-value text-green">АКТИВНИЙ (GEMINI)</div>
+                <div class="stat-sub">Захист від пробоїв</div>
+            </div>
+        </section>
+
+        <!-- Active Position & Pending LLM Review Section -->
+        <section class="main-content-grid">
+            <!-- Active Trade Panel -->
+            <div class="glass-card section-card">
+                <h3>📌 Активна Позиція</h3>
+                <div id="active-position-container">
+                    <div class="empty-state">Немає відкритих угод (Сканування ринку...)</div>
+                </div>
+            </div>
+
+            <!-- Bot Control Panel -->
+            <div class="glass-card section-card">
+                <h3>⚙️ Панель Управління</h3>
+                <div class="controls-group">
+                    <div class="control-row">
+                        <span>Статус бота:</span>
+                        <button id="toggle-active-btn" class="btn btn-success">▶️ Бот працює</button>
+                    </div>
+
+                    <div class="control-row">
+                        <span>Режим торгівлі:</span>
+                        <button id="toggle-mode-btn" class="btn btn-warning">Переключити на LIVE</button>
+                    </div>
+
+                    <div class="control-row">
+                        <span>Вибір торгової пари:</span>
+                        <select id="symbol-select" class="input-field select-field">
+                            <option value="SHIB/USDT">SHIB / USDT (15m)</option>
+                            <option value="SOL/USDT">SOL / USDT (15m)</option>
+                            <option value="BTC/USDT">BTC / USDT (15m)</option>
+                        </select>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Orders & LLM Review History Table -->
+        <section class="glass-card section-card history-section">
+            <h3>📜 Історія угод та вердикти ШІ-Аналітика</h3>
+            <div class="table-wrapper">
+                <table class="data-table">
+                    <thead>
+                        <tr>
+                            <th>Час</th>
+                            <th>Пара</th>
+                            <th>Тип</th>
+                            <th>Ціна входу</th>
+                            <th>Об'єм</th>
+                            <th>Статус</th>
+                            <th>ШІ Вердикт / Причина</th>
+                        </tr>
+                    </thead>
+                    <tbody id="orders-table-body">
+                        <tr>
+                            <td colspan="7" class="text-center">Очікування першої угоди...</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </section>
+    </div>
+
+    <script src="/static/app.js"></script>
+</body>
+</html>

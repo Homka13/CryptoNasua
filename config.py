@@ -1,0 +1,52 @@
+import os
+from dataclasses import dataclass
+from dotenv import load_dotenv
+
+load_dotenv()
+
+@dataclass
+class TradingConfig:
+    # Exchange & Authentication
+    bybit_api_key: str = os.getenv("BYBIT_API_KEY", "")
+    bybit_api_secret: str = os.getenv("BYBIT_API_SECRET", "")
+    testnet: bool = os.getenv("TESTNET", "false").lower() == "true"
+    paper_trading: bool = os.getenv("PAPER_TRADING", "true").lower() == "true"
+
+    # Telegram Security
+    telegram_bot_token: str = os.getenv("TELEGRAM_BOT_TOKEN", "")
+    telegram_chat_id: str = os.getenv("TELEGRAM_CHAT_ID", "")
+
+    # Web Dashboard & Security Whitelist
+    allowed_google_email: str = os.getenv("ALLOWED_GOOGLE_EMAIL", "")
+    google_client_id: str = os.getenv("GOOGLE_CLIENT_ID", "")
+    jwt_secret: str = os.getenv("JWT_SECRET", "super-secret-crypto-bot-key-2026")
+    dashboard_port: int = int(os.getenv("DASHBOARD_PORT", "5000"))
+
+    # LLM Confirmation Filter (Gemini / OpenAI / OpenRouter)
+    use_llm_confirmation: bool = os.getenv("USE_LLM_CONFIRMATION", "false").lower() == "true"
+    llm_api_key: str = os.getenv("LLM_API_KEY", "")
+    llm_provider: str = os.getenv("LLM_PROVIDER", "gemini").lower()  # gemini or openai
+
+    # Capital & Market Settings
+    symbol: str = os.getenv("SYMBOL", "SOL/USDT")
+    timeframe: str = os.getenv("TIMEFRAME", "15m")
+    initial_capital: float = float(os.getenv("INITIAL_CAPITAL", "10.0"))
+    trade_size_usdt: float = float(os.getenv("TRADE_SIZE_USDT", "2.5"))
+    max_active_orders: int = 3
+    min_order_usdt: float = 1.0  # Bybit minimum spot order value is ~1 USDT
+
+    # Risk Management
+    stop_loss_pct: float = 0.02   # 2.0% Stop Loss
+    take_profit_pct: float = 0.035 # 3.5% Take Profit
+    max_daily_loss_pct: float = 0.10 # Stop trading if 10% lost in 24h
+
+    # Strategy Parameters (Micro-Grid + RSI / EMA)
+    rsi_period: int = 14
+    rsi_oversold: float = 40.0
+    rsi_overbought: float = 70.0
+    ema_fast: int = 20
+    ema_slow: int = 50
+    grid_levels: int = 3
+    grid_step_pct: float = 0.01  # 1% price step between grid levels
+
+config = TradingConfig()
