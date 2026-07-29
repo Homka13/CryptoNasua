@@ -26,6 +26,7 @@ class DashboardServer:
         self.app.router.add_post('/api/auth/login', self.handle_password_login)
         self.app.router.add_get('/api/status', self.handle_get_status)
         self.app.router.add_get('/api/orders', self.handle_get_orders)
+        self.app.router.add_get('/api/klines', self.handle_get_klines)
         self.app.router.add_post('/api/control', self.handle_post_control)
         
         # Serve static assets
@@ -203,6 +204,31 @@ class DashboardServer:
         all_items.sort(key=lambda x: x.get('timestamp', 0), reverse=True)
 
         return web.json_response(all_items)
+
+    async def handle_get_klines(self, request: web.Request) -> web.Response:
+        if not self._verify_session(request):
+            return web.json_response({'error': 'Unauthorized'}, status=401)
+
+        symbol = request.query.get('symbol', 'SHIB/USDT')
+        if symbol == 'AUTO' or not symbol:
+            symbol = 'SHIB/USDT'
+
+        try:
+            klines = self.bot.exchange.fetch_ohlcv(symbol, timeframe=config.timeframe, limit=50)
+            formatted = []
+            for k in klines:
+                formatted.append({
+                    'time': k[0],
+                    'open': k[1],
+                    'high': k[2],
+                    'low': k[3],
+                    'close': k[4],
+                    'volume': k[5]
+                })
+            return web.json_response({'symbol': symbol, 'klines': formatted})
+        except Exception as e:
+            logger.error(f"Error fetching klines for {symbol}: {e}")
+            return web.json_response({'symbol': symbol, 'klines': [], 'error': str(e)})
 
     async def handle_post_control(self, request: web.Request) -> web.Response:
         if not self._verify_session(request):

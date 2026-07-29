@@ -18,6 +18,10 @@
     font-family: 'Inter', sans-serif;
 }
 
+.hidden {
+    display: none !important;
+}
+
 body.dark-theme {
     background-color: var(--bg-dark);
     background-image: 
@@ -337,4 +341,33 @@ body.dark-theme {
     white-space: nowrap !important;
     border-radius: 8px !important;
     flex-shrink: 0 !important;
+}
+
+/* Watchlist Bar Scroll Styling */
+.watchlist-bar-tabs::-webkit-scrollbar {
+    height: 4px;
+}
+.watchlist-bar-tabs::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.2);
+    border-radius: 4px;
+}
+
+/* Custom Scrollbars for Fixed-Height Panels */
+.panel-card-fixed ::-webkit-scrollbar,
+.table-wrapper-scrollable::-webkit-scrollbar,
+#scan-log-console::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+}
+.panel-card-fixed ::-webkit-scrollbar-thumb,
+.table-wrapper-scrollable::-webkit-scrollbar-thumb,
+#scan-log-console::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.2);
+    border-radius: 4px;
+}
+
+@media (max-width: 900px) {
+    .dual-panel-grid {
+        grid-template-columns: 1fr !important;
+    }
 }

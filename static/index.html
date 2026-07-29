@@ -8,6 +8,8 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <!-- D3.js Library for Custom Smooth Interactive Charting -->
+    <script src="https://d3js.org/d3.v7.min.js"></script>
     <!-- TradingView Widget Library -->
     <script type="text/javascript" src="https://s3.tradingview.com/tv.js"></script>
     <!-- Google Identity Services for Google OAuth -->
@@ -88,38 +90,39 @@
 
             <div class="glass-card stat-card">
                 <div class="stat-label">ШІ-Фільтр (LLM Sentinel)</div>
-                <div id="stat-llm-status" class="stat-value text-green">АКТИВНИЙ (GEMINI)</div>
-                <div id="stat-llm-sub" class="stat-sub">Захист від пробоїв</div>
+                <div id="stat-llm-status" class="stat-value text-green">АКТИВНИЙ (DEEPSEEK)</div>
+                <div class="stat-sub">Модель: DeepSeek V4 Pro / V3</div>
             </div>
         </section>
 
-        <!-- Active Position & Pending LLM Review Section -->
-        <section class="main-content-grid">
-            <!-- Active Trade Panel -->
-            <div class="glass-card section-card">
-                <h3>📌 Активна Позиція</h3>
-                <div id="active-position-container">
-                    <div class="empty-state">Немає відкритих угод (Сканування ринку...)</div>
-                </div>
+        <!-- Active Position Banner -->
+        <section id="active-position-container" class="glass-card section-card position-section" style="margin-bottom: 24px;">
+            <h3>📌 Активна Позиція</h3>
+            <div id="active-position-content">
+                <p class="text-muted">Немає відкритих угод (Сканування ринку...)</p>
             </div>
+        </section>
 
-            <!-- Bot Control Panel -->
-            <div class="glass-card section-card">
-                <h3>⚙️ Панель Управління</h3>
-                <div class="controls-group">
+        <!-- Controls Section -->
+        <section class="glass-card section-card controls-section" style="margin-bottom: 24px;">
+            <h3>⚙️ Управління Ботом</h3>
+            <div class="controls-grid">
+                <div class="control-group">
                     <div class="control-row">
-                        <span>Статус бота:</span>
-                        <button id="toggle-active-btn" class="btn btn-success">▶️ Бот працює</button>
-                    </div>
-
-                    <div class="control-row">
-                        <span>Режим виконання:</span>
-                        <div class="mode-btn-group">
-                            <button id="btn-exec-paper" class="btn-mode active-chill">🧪 Демо ($10)</button>
-                            <button id="btn-exec-live" class="btn-mode">⚡ Live (Bybit)</button>
+                        <span>Статус торгівлі:</span>
+                        <div class="btn-group">
+                            <button id="btn-resume" class="btn btn-sm btn-success">▶️ Запустити</button>
+                            <button id="btn-pause" class="btn btn-sm btn-danger">⏸️ Пауза</button>
                         </div>
                     </div>
+                    
+                    <div class="control-row">
+                        <span>Режим виконання:</span>
+                        <button id="toggle-execution-mode-btn" class="btn btn-sm btn-outline">🧪 Демо-Торгівля</button>
+                    </div>
+                </div>
 
+                <div class="control-group">
                     <div class="control-row">
                         <span>Стиль торгівлі (LLM):</span>
                         <div class="mode-btn-group">
@@ -134,10 +137,7 @@
                             <option value="deepseek">🤖 DeepSeek V4 Pro / V3</option>
                             <option value="gemini">💎 Google Gemini 1.5</option>
                             <option value="openai">🧠 OpenAI GPT-4o-mini</option>
-                        </select>
-                    </div>
-
-                    <div class="control-row">
+                            <div class="control-row">
                         <span>Захист від сну (24/7 Windows Keep-Alive):</span>
                         <button id="toggle-sleep-btn" class="btn btn-sm btn-outline">💤 24/7 АКТИВНИЙ</button>
                     </div>
@@ -167,61 +167,76 @@
             </div>
         </section>
 
-        <!-- Live TradingView Chart Section -->
-        <section class="glass-card section-card" style="margin-bottom: 24px; padding: 16px;">
-            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; flex-wrap: wrap; gap: 10px;">
+        <!-- Custom D3.js Interactive Multi-Coin Watchlist Chart Section -->
+        <section class="glass-card section-card" style="margin-bottom: 24px; padding: 20px;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; flex-wrap: wrap; gap: 12px;">
                 <h3 style="margin: 0; display: flex; align-items: center; gap: 8px;">
-                    📊 Графік Біржі у Реальному Часі <span style="color: #63b3ed; font-size: 0.8rem; font-weight: bold;">(TradingView Bybit Spot)</span>
+                    📈 Інтерактивний D3.js Графік Монет <span style="color: #63b3ed; font-size: 0.8rem; font-weight: bold;">(Без Стрибків | Realtime Bybit Spot)</span>
                 </h3>
                 <div style="display: flex; gap: 8px; align-items: center;">
-                    <span id="chart-pair-title" style="color: #63b3ed; font-weight: bold; font-family: monospace;">BYBIT:SHIBUSDT</span>
+                    <span id="d3-chart-active-pair" style="color: #48bb78; font-weight: bold; font-family: monospace; font-size: 1.05rem;">BYBIT: SOL/USDT</span>
                     <span class="pulse-dot green"></span>
                 </div>
             </div>
-            <div class="tradingview-widget-container" style="height: 480px; width: 100%; border-radius: 8px; overflow: hidden; border: 1px solid rgba(255,255,255,0.08);">
-                <div id="tradingview_chart_element" style="height: 480px; width: 100%;"></div>
+
+            <!-- Dynamic Watchlist Coin Selector Bar -->
+            <div id="watchlist-bar" class="watchlist-bar-tabs" style="display: flex; gap: 8px; overflow-x: auto; padding-bottom: 10px; margin-bottom: 14px;">
+                <!-- Watchlist coin pills dynamically populated by app.js -->
+            </div>
+
+            <!-- D3.js Canvas / SVG Container -->
+            <div id="d3-chart-wrapper" style="width: 100%; height: 440px; background: rgba(15, 23, 42, 0.7); border: 1px solid rgba(255,255,255,0.1); border-radius: 12px; position: relative; overflow: hidden;">
+                <svg id="d3-chart-svg" style="width: 100%; height: 100%; display: block;"></svg>
+                <div id="d3-tooltip" class="d3-tooltip-box hidden"></div>
             </div>
         </section>
 
-        <!-- Live Market Scanning Log Feed -->
-        <section class="glass-card section-card scan-feed-section" style="margin-bottom: 24px;">
-            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
-                <h3 style="margin: 0; display: flex; align-items: center; gap: 8px;">
-                    📡 Сканування ринку в реальному часі <span style="color: #48bb78; font-size: 0.8rem; font-weight: bold; animation: pulse 1.5s infinite;">● LIVE</span>
-                </h3>
-                <span id="scan-last-time" style="font-size: 0.8rem; color: #a0aec0;">Сканування активовано...</span>
+        <!-- DUAL PARALLEL FIXED-HEIGHT PANELS GRID -->
+        <section class="dual-panel-grid" style="display: grid; grid-template-columns: 1fr 1fr; gap: 24px; margin-bottom: 24px;">
+            <!-- Panel 1: Live Screener Stream -->
+            <div class="glass-card panel-card-fixed" style="height: 520px; display: flex; flex-direction: column;">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; padding-bottom: 8px; border-bottom: 1px solid rgba(255,255,255,0.08);">
+                    <h3 style="margin: 0; font-size: 1.05rem; display: flex; align-items: center; gap: 8px;">
+                        📡 Сканування Ринку <span style="color: #48bb78; font-size: 0.8rem; font-weight: bold; animation: pulse 1.5s infinite;">● LIVE</span>
+                    </h3>
+                    <span id="scan-last-time" style="font-size: 0.75rem; color: #a0aec0;">Оновлення...</span>
+                </div>
+                <div id="scan-log-console" style="flex: 1; background: rgba(15, 23, 42, 0.7); border: 1px solid rgba(255, 255, 255, 0.1); border-radius: 8px; padding: 12px; font-family: 'Courier New', Courier, monospace; font-size: 0.82rem; overflow-y: auto; display: flex; flex-direction: column; gap: 8px;">
+                    <div style="color: #718096;">Очікування перших результатів сканування...</div>
+                </div>
             </div>
-            <div id="scan-log-console" style="background: rgba(15, 23, 42, 0.7); border: 1px solid rgba(255, 255, 255, 0.1); border-radius: 8px; padding: 12px; font-family: 'Courier New', Courier, monospace; font-size: 0.85rem; max-height: 160px; overflow-y: auto; display: flex; flex-direction: column; gap: 6px;">
-                <div style="color: #718096;">Очікування перших результатів сканування...</div>
-            </div>
-        </section>
 
-        <!-- Orders & LLM Review History Table -->
-        <section class="glass-card section-card history-section">
-            <h3>📜 Історія угод та вердикти ШІ-Аналітика</h3>
-            <div class="table-wrapper">
-                <table class="data-table">
-                    <thead>
-                        <tr>
-                            <th>Час</th>
-                            <th>Пара</th>
-                            <th>Тип</th>
-                            <th>Ціна входу</th>
-                            <th>Об'єм</th>
-                            <th>Статус</th>
-                            <th>ШІ Вердикт / Причина</th>
-                        </tr>
-                    </thead>
-                    <tbody id="orders-table-body">
-                        <tr>
-                            <td colspan="7" class="text-center">Очікування першої угоди...</td>
-                        </tr>
-                    </tbody>
-                </table>
+            <!-- Panel 2: Orders & LLM Review History Table -->
+            <div class="glass-card panel-card-fixed" style="height: 520px; display: flex; flex-direction: column;">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; padding-bottom: 8px; border-bottom: 1px solid rgba(255,255,255,0.08);">
+                    <h3 style="margin: 0; font-size: 1.05rem; display: flex; align-items: center; gap: 8px;">
+                        📜 Історія Угод та ШІ Вердикти
+                    </h3>
+                    <span id="history-count-badge" class="badge" style="font-size: 0.75rem;">0 записів</span>
+                </div>
+                <div class="table-wrapper-scrollable" style="flex: 1; overflow-y: auto; border: 1px solid rgba(255, 255, 255, 0.1); border-radius: 8px; background: rgba(15, 23, 42, 0.7);">
+                    <table class="data-table" style="width: 100%;">
+                        <thead style="position: sticky; top: 0; background: #0f172a; z-index: 10;">
+                            <tr>
+                                <th style="padding: 10px;">Час</th>
+                                <th style="padding: 10px;">Пара</th>
+                                <th style="padding: 10px;">Тип</th>
+                                <th style="padding: 10px;">Ціна</th>
+                                <th style="padding: 10px;">Статус</th>
+                                <th style="padding: 10px;">ШІ Причина</th>
+                            </tr>
+                        </thead>
+                        <tbody id="orders-table-body">
+                            <tr>
+                                <td colspan="6" class="text-center" style="padding: 20px; color: #718096;">Очікування першої угоди...</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
             </div>
         </section>
     </div>
 
-    <script src="/static/app.js?v=20260729_v20"></script>
+    <script src="/static/app.js?v=20260729_v22"></script>
 </body>
 </html>
