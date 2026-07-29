@@ -123,8 +123,8 @@ class DashboardServer:
             'initial_capital': config.initial_capital,
             'llm_enabled': config.use_llm_confirmation,
             'llm_provider': config.llm_provider.upper(),
-            'llm_key_set': bool(config.deepseek_api_key or config.llm_api_key),
-            'llm_key_masked': f"{(config.deepseek_api_key or config.llm_api_key)[:6]}...{(config.deepseek_api_key or config.llm_api_key)[-4:]}" if (config.deepseek_api_key or config.llm_api_key) and len(config.deepseek_api_key or config.llm_api_key) > 8 else None,
+            'llm_key_set': bool(config.deepseek_api_key or config.llm_api_key or os.getenv("DEEPSEEK_API_KEY", "")) and (config.deepseek_api_key or config.llm_api_key or os.getenv("DEEPSEEK_API_KEY", "")) != "your_deepseek_api_key_here",
+            'llm_key_masked': f"{(config.deepseek_api_key or config.llm_api_key or os.getenv('DEEPSEEK_API_KEY', ''))[:6]}...{(config.deepseek_api_key or config.llm_api_key or os.getenv('DEEPSEEK_API_KEY', ''))[-4:]}" if (config.deepseek_api_key or config.llm_api_key or os.getenv("DEEPSEEK_API_KEY", "")) and len(config.deepseek_api_key or config.llm_api_key or os.getenv("DEEPSEEK_API_KEY", "")) > 8 and (config.deepseek_api_key or config.llm_api_key or os.getenv("DEEPSEEK_API_KEY", "")) != "your_deepseek_api_key_here" else None,
             'trading_mode': config.trading_mode,
             'trading_mode_display': config.trading_mode_display,
             'min_llm_confidence': config.min_llm_confidence,
@@ -199,6 +199,33 @@ class DashboardServer:
                     ))
                     return web.json_response({'success': True, 'llm_provider': config.llm_provider.upper()})
                 return web.json_response({'success': False, 'error': 'Invalid provider'}, status=400)
+            elif action == 'set_llm_key':
+                new_key = body.get('key', '').strip()
+                if new_key:
+                    config.deepseek_api_key = new_key
+                    config.llm_api_key = new_key
+                    try:
+                        import os
+                        env_path = os.path.join(os.path.dirname(__file__), '.env')
+                        if os.path.exists(env_path):
+                            with open(env_path, 'r', encoding='utf-8') as f:
+                                lines = f.readlines()
+                            new_lines = []
+                            for line in lines:
+                                if line.startswith('DEEPSEEK_API_KEY='):
+                                    new_lines.append(f'DEEPSEEK_API_KEY={new_key}\n')
+                                elif line.startswith('LLM_API_KEY='):
+                                    new_lines.append(f'LLM_API_KEY={new_key}\n')
+                                else:
+                                    new_lines.append(line)
+                            with open(env_path, 'w', encoding='utf-8') as f:
+                                f.writelines(new_lines)
+                    except Exception as env_err:
+                        logger.error(f"Error writing to .env: {env_err}")
+
+                    masked = f"{new_key[:6]}...{new_key[-4:]}" if len(new_key) > 8 else "set"
+                    return web.json_response({'success': True, 'key_masked': masked})
+                return web.json_response({'success': False, 'error': 'Key cannot be empty'}, status=400)
 
             return web.json_response({'success': False, 'error': 'Unknown action'}, status=400)
         except Exception as e:
