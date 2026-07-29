@@ -1,3 +1,6 @@
+import os
+import json
+import time
 import asyncio
 import logging
 import sys
@@ -252,27 +255,33 @@ class TradingBot:
                         )
 
                         if is_allowed:
-                            logger.info(f"Executing BUY for {target_sym} via Quant Engine: {risk_reason}")
-                            orders = await self.exchange.execute_smart_order('buy', amount, target_meta['price'])
-                            
-                            verdict_record['amount'] = amount
-                            self.current_position = {
-                                'symbol': target_sym,
-                                'entry_price': target_meta['price'],
-                                'amount': amount,
-                                'order_id': orders[0].get('id') if orders else 'N/A'
-                            }
-                            self._save_position(self.current_position)
-                            
-                            await self.telegram.send_alert(
-                                f"🟢 *BUY ORDER EXECUTED (Quant Engine)*\n"
-                                f"• Pair: `{target_sym}`\n"
-                                f"• Price: `${target_meta['price']:.2f}`\n"
-                                f"• Amount: `{amount:.4f}`\n"
-                                f"• Execution: `Limit Offset + Iceberg ({config.iceberg_slices} slices)`\n"
-                                f"• Strategy Reason: {target_reason}\n"
-                                f"• {llm_reason}"
-                            )
+                            try:
+                                logger.info(f"Executing BUY for {target_sym} via Quant Engine: {risk_reason}")
+                                orders = await self.exchange.execute_smart_order('buy', amount, target_meta['price'])
+                                
+                                verdict_record['amount'] = amount
+                                self.current_position = {
+                                    'symbol': target_sym,
+                                    'entry_price': target_meta['price'],
+                                    'amount': amount,
+                                    'order_id': orders[0].get('id') if orders else 'N/A'
+                                }
+                                self._save_position(self.current_position)
+                                
+                                await self.telegram.send_alert(
+                                    f"🟢 *BUY ORDER EXECUTED (Quant Engine)*\n"
+                                    f"• Pair: `{target_sym}`\n"
+                                    f"• Price: `${target_meta['price']:.2f}`\n"
+                                    f"• Amount: `{amount:.4f}`\n"
+                                    f"• Execution: `Limit Offset + Iceberg ({config.iceberg_slices} slices)`\n"
+                                    f"• Strategy Reason: {target_reason}\n"
+                                    f"• {llm_reason}"
+                                )
+                            except Exception as order_err:
+                                verdict_record['status'] = 'EXCHANGE_REJECTED'
+                                verdict_record['reason'] += f" | ⚠️ Bybit Error: {order_err}"
+                                logger.error(f"Bybit Order Execution Error for {target_sym}: {order_err}")
+                                await self.telegram.send_alert(f"⚠️ *Bybit Order Rejected*: {order_err}")
                         else:
                             verdict_record['status'] = 'RISK_REJECTED'
                             verdict_record['reason'] += f" | ⚠️ RiskManager: {risk_reason}"
