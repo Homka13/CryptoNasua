@@ -304,14 +304,14 @@ class DashboardServer:
         self.runner = web.AppRunner(self.app)
         await self.runner.setup()
         
-        ports_to_try = [config.dashboard_port] + [5001, 5002, 5005, 8080, 8081, 8888]
+        ports_to_try = [5001, 5002, 5005, 8080, 8081, 8888, 5000]
         bound = False
         for port in ports_to_try:
             try:
                 self.site = web.TCPSite(self.runner, '127.0.0.1', port)
                 await self.site.start()
                 config.dashboard_port = port
-                logger.info(f"🌐 PRIVATE WEB DASHBOARD RUNNING AT: http://127.0.0.1:{port}")
+                logger.info(f"🌐 PRIVATE WEB DASHBOARD RUNNING AT: http://127.0.0.1:{port} (Логін: yuhim1308@gmail.com / Пароль: admin)")
                 bound = True
                 break
             except Exception as e:
