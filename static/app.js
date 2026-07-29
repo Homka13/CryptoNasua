@@ -168,7 +168,10 @@ function initApp() {
                 headers: { 'Authorization': `Bearer ${authToken}` }
             });
             if (resp.status === 401) {
-                logoutBtn?.click();
+                localStorage.removeItem('bot_auth_token');
+                localStorage.removeItem('bot_user_email');
+                if (loginModal) loginModal.classList.remove('hidden');
+                if (dashboard) dashboard.classList.add('hidden');
                 return;
             }
             const data = await resp.json();

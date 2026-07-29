@@ -48,12 +48,14 @@ class DashboardServer:
             password = body.get('password', '')
 
             from user_manager import user_manager
-            success, msg = user_manager.register_user(email, password)
+            success, msg, token = user_manager.register_user(email, password)
             if not success:
                 return web.json_response({'success': False, 'error': msg}, status=400)
 
-            session_token = f"session_{email}"
+            session_token = token or f"session_{email}"
             self.authenticated_sessions.add(session_token)
+            if self.bot:
+                self.bot.trading_active = True
 
             return web.json_response({
                 'success': True,
@@ -72,12 +74,14 @@ class DashboardServer:
             password = body.get('password', '')
 
             from user_manager import user_manager
-            success, msg, user = user_manager.authenticate_user(email, password)
+            success, msg, user, token = user_manager.authenticate_user(email, password)
             if not success:
                 return web.json_response({'success': False, 'error': msg}, status=401)
 
-            session_token = f"session_{email}"
+            session_token = token or f"session_{email}"
             self.authenticated_sessions.add(session_token)
+            if self.bot:
+                self.bot.trading_active = True
 
             return web.json_response({
                 'success': True,
@@ -113,6 +117,8 @@ class DashboardServer:
 
             session_token = f"session_{email}"
             self.authenticated_sessions.add(session_token)
+            if self.bot:
+                self.bot.trading_active = True
             logger.info(f"🟢 AUTHORIZED GOOGLE LOGIN SUCCESSFUL: {email}")
             
             return web.json_response({
@@ -127,9 +133,10 @@ class DashboardServer:
     def _verify_session(self, request: web.Request) -> bool:
         auth_header = request.headers.get('Authorization', '')
         token = auth_header.replace('Bearer ', '').strip()
-        if not config.allowed_google_email:
-            return True  # Dev mode
-        return token in self.authenticated_sessions
+        if not token or token == 'null' or token == 'undefined':
+            return False
+        from user_manager import user_manager
+        return user_manager.verify_session(token) or (token in self.authenticated_sessions)
 
     async def handle_get_status(self, request: web.Request) -> web.Response:
         if not self._verify_session(request):

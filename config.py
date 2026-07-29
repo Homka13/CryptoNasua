@@ -21,7 +21,7 @@ class TradingConfig:
     allowed_google_email: str = os.getenv("ALLOWED_GOOGLE_EMAIL", "")
     google_client_id: str = os.getenv("GOOGLE_CLIENT_ID", "")
     jwt_secret: str = os.getenv("JWT_SECRET", "super-secret-crypto-bot-key-2026")
-    dashboard_port: int = int(os.getenv("DASHBOARD_PORT", "5000"))
+    dashboard_port: int = int(os.getenv("DASHBOARD_PORT", "5001"))
 
     # System & 24/7 Anti-Sleep Settings
     prevent_sleep: bool = os.getenv("PREVENT_SLEEP", "true").lower() == "true"

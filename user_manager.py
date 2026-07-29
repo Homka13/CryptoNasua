@@ -15,6 +15,7 @@ class UserManager:
     def __init__(self):
         os.makedirs(DATA_DIR, exist_ok=True)
         self.users: Dict[str, Dict[str, Any]] = self._load_users()
+        self.active_sessions: Dict[str, str] = {}  # token -> email
 
     def _load_users(self) -> Dict[str, Dict[str, Any]]:
         if not os.path.exists(USERS_FILE):
@@ -40,20 +41,20 @@ class UserManager:
         pwd_hash = hashlib.sha256(salted_pwd).hexdigest()
         return pwd_hash, salt
 
-    def register_user(self, email: str, password: str) -> tuple[bool, str]:
+    def register_user(self, email: str, password: str) -> tuple[bool, str, Optional[str]]:
         """Registers a new user account."""
         email = email.strip().lower()
 
         import re
         email_regex = r"^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$"
         if not re.match(email_regex, email):
-            return False, "Некоректний формат Email адреси."
+            return False, "Некоректний формат Email адреси.", None
 
         if len(password) < 6:
-            return False, "Пароль має містити щонайменше 6 символів."
+            return False, "Пароль має містити щонайменше 6 символів.", None
 
         if email in self.users:
-            return False, f"Користувач з Email '{email}' вже зареєстрований."
+            return False, f"Користувач з Email '{email}' вже зареєстрований.", None
 
         pwd_hash, salt = self._hash_password(password)
         self.users[email] = {
@@ -64,23 +65,33 @@ class UserManager:
             'created_at': os.getenv('BUILD_DATE', '2026-07-29')
         }
         self._save_users()
+        token = secrets.token_hex(24)
+        self.active_sessions[token] = email
         logger.info(f"👤 NEW USER REGISTERED SUCCESSFULLY: {email}")
-        return True, "Реєстрація успішна! Тепер ви можете увійти."
+        return True, "Реєстрація успішна! Ласкаво просимо.", token
 
-    def authenticate_user(self, email: str, password: str) -> tuple[bool, str, Optional[Dict[str, Any]]]:
+    def authenticate_user(self, email: str, password: str) -> tuple[bool, str, Optional[Dict[str, Any]], Optional[str]]:
         """Authenticates user with email and password."""
         email = email.strip().lower()
 
         if email not in self.users:
-            return False, "Користувача з таким Email не знайдено.", None
+            return False, "Користувача з таким Email не знайдено.", None, None
 
         user = self.users[email]
         pwd_hash, _ = self._hash_password(password, salt=user['salt'])
 
         if pwd_hash != user['password_hash']:
-            return False, "Невірний пароль. Будь ласка, спробуйте ще раз.", None
+            return False, "Невірний пароль. Будь ласка, спробуйте ще раз.", None, None
 
-        logger.info(f"🟢 USER AUTHENTICATED SUCCESSFUL: {email}")
-        return True, "Авторизація успішна", user
+        token = secrets.token_hex(24)
+        self.active_sessions[token] = email
+        logger.info(f"🟢 USER AUTHENTICATED SUCCESSFULLY: {email}")
+        return True, "Авторизація успішна", user, token
+
+    def verify_session(self, token: str) -> bool:
+        """Verifies if session token is active."""
+        if not token:
+            return False
+        return token in self.active_sessions
 
 user_manager = UserManager()

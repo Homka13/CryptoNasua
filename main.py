@@ -62,6 +62,9 @@ class TradingBot:
         self.scan_logs = deque(maxlen=30)
         self.ai_verdicts = deque(maxlen=30)
         
+        # Initialize trading_active flag (requires Web UI authentication)
+        self.trading_active = False
+
         # Initialize LLM Analyst filter
         from llm_analyst import LLMAnalyst
         self.llm_analyst = LLMAnalyst()
@@ -146,6 +149,10 @@ class TradingBot:
         import time
         while True:
             try:
+                if not getattr(self, 'trading_active', False):
+                    await asyncio.sleep(2)
+                    continue
+
                 if not self.telegram.is_active:
                     await asyncio.sleep(5)
                     continue
