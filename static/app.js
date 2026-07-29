@@ -89,19 +89,48 @@ document.addEventListener('DOMContentLoaded', () => {
             const data = await resp.json();
 
             // Update UI Stats
+            const isPaper = data.paper_trading;
             const totalUsdt = data.usdt_total !== undefined ? data.usdt_total : data.usdt_balance;
             const freeUsdt = data.usdt_balance !== undefined ? data.usdt_balance : 0;
             const initUsdt = data.initial_capital !== undefined ? data.initial_capital : 10;
-            
-            document.getElementById('stat-balance').innerText = `$${totalUsdt.toFixed(2)} USDT`;
-            const balSubElem = document.getElementById('stat-balance-sub');
-            if (balSubElem) {
-                balSubElem.innerText = `Вільні кошти: $${freeUsdt.toFixed(2)} | Початкові: $${initUsdt.toFixed(2)}`;
+            const realUsdt = data.real_usdt_balance;
+
+            if (isPaper) {
+                document.getElementById('stat-balance').innerText = `$${totalUsdt.toFixed(2)} USDT (Демо)`;
+                const balSubElem = document.getElementById('stat-balance-sub');
+                if (balSubElem) {
+                    let subText = `Вільні кошти: $${freeUsdt.toFixed(2)}`;
+                    if (realUsdt !== null && realUsdt !== undefined) {
+                        subText += ` | Real Bybit: $${realUsdt.toFixed(2)} USDT`;
+                    } else {
+                        subText += ` | Початкові: $${initUsdt.toFixed(2)}`;
+                    }
+                    balSubElem.innerText = subText;
+                }
+            } else {
+                document.getElementById('stat-balance').innerText = `$${totalUsdt.toFixed(2)} USDT (Live Bybit)`;
+                const balSubElem = document.getElementById('stat-balance-sub');
+                if (balSubElem) {
+                    balSubElem.innerText = `Доступний залишок Bybit: $${freeUsdt.toFixed(2)} USDT`;
+                }
             }
 
             document.getElementById('stat-symbol-price').innerText = `${data.symbol} $${data.current_price.toFixed(4)}`;
             document.getElementById('stat-timeframe').innerText = `Таймфрейм: ${data.timeframe}`;
             
+            // Execution Mode Buttons Sync
+            const btnExecPaper = document.getElementById('btn-exec-paper');
+            const btnExecLive = document.getElementById('btn-exec-live');
+            if (btnExecPaper && btnExecLive) {
+                if (isPaper) {
+                    btnExecPaper.className = 'btn-mode active-chill';
+                    btnExecLive.className = 'btn-mode';
+                } else {
+                    btnExecPaper.className = 'btn-mode';
+                    btnExecLive.className = 'btn-mode active-hunt';
+                }
+            }
+
             // Trading mode stat & buttons
             const modeElem = document.getElementById('stat-trading-mode');
             const modeSubElem = document.getElementById('stat-trading-mode-sub');
@@ -183,7 +212,7 @@ document.addEventListener('DOMContentLoaded', () => {
             const data = await resp.json();
 
             const tbody = document.getElementById('orders-table-body');
-            const orders = data.order_history || [];
+            const orders = Array.isArray(data) ? data : (data.order_history || []);
 
             if (orders.length === 0) {
                 tbody.innerHTML = `<tr><td colspan="7" class="text-center">Очікування першої угоди...</td></tr>`;
@@ -224,16 +253,56 @@ document.addEventListener('DOMContentLoaded', () => {
         fetchStatus();
     });
 
-    document.getElementById('toggle-mode-btn').addEventListener('click', async () => {
-        if (confirm("Ви дійсно хочете змінити режим торгівлі (Paper / Live)?")) {
+    const btnExecPaper = document.getElementById('btn-exec-paper');
+    if (btnExecPaper) {
+        btnExecPaper.addEventListener('click', async () => {
             await fetch('/api/control', {
                 method: 'POST',
                 headers: { 'Authorization': `Bearer ${authToken}`, 'Content-Type': 'application/json' },
-                body: JSON.stringify({ action: 'toggle_mode' })
+                body: JSON.stringify({ action: 'set_execution_mode', mode: 'paper' })
             });
             fetchStatus();
-        }
-    });
+        });
+    }
+
+    const btnExecLive = document.getElementById('btn-exec-live');
+    if (btnExecLive) {
+        btnExecLive.addEventListener('click', async () => {
+            if (confirm("⚠️ УВАГА: Ви вмикаєте РЕАЛЬНУ торгівлю на Bybit! Продовжити?")) {
+                await fetch('/api/control', {
+                    method: 'POST',
+                    headers: { 'Authorization': `Bearer ${authToken}`, 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ action: 'set_execution_mode', mode: 'live' })
+                });
+                fetchStatus();
+            }
+        });
+    }
+
+    const saveLlmKeyBtn = document.getElementById('save-llm-key-btn');
+    if (saveLlmKeyBtn) {
+        saveLlmKeyBtn.addEventListener('click', async () => {
+            const keyInput = document.getElementById('llm-key-input');
+            const key = keyInput ? keyInput.value.trim() : '';
+            if (!key) {
+                alert("Будь ласка, введіть API ключ!");
+                return;
+            }
+            const resp = await fetch('/api/control', {
+                method: 'POST',
+                headers: { 'Authorization': `Bearer ${authToken}`, 'Content-Type': 'application/json' },
+                body: JSON.stringify({ action: 'set_llm_key', key })
+            });
+            const resData = await resp.json();
+            if (resData.success) {
+                alert("✅ API Ключ ШІ успішно збережено!");
+                keyInput.value = '';
+                fetchStatus();
+            } else {
+                alert("❌ Помилка збереження ключа: " + (resData.error || "Невідома помилка"));
+            }
+        });
+    }
 
     document.getElementById('btn-mode-chill').addEventListener('click', async () => {
         await fetch('/api/control', {

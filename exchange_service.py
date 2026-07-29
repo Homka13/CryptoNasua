@@ -161,6 +161,14 @@ class ExchangeService:
             logger.error(f"Error fetching balance: {e}")
             raise
 
+    def fetch_real_balance(self) -> Dict[str, Any]:
+        """Fetches live balance directly from Bybit CEX regardless of paper mode."""
+        try:
+            return self.exchange.fetch_balance()
+        except Exception as e:
+            logger.debug(f"Could not fetch real Bybit balance: {e}")
+            return {}
+
     def calculate_orderbook_vwap(self, symbol: str, amount: float, side: str) -> Tuple[float, float, float]:
         """
         Calculates the Volume-Weighted Average Price (VWAP) against live orderbook depth.

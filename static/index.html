@@ -92,8 +92,11 @@
                     </div>
 
                     <div class="control-row">
-                        <span>Режим торгівлі:</span>
-                        <button id="toggle-mode-btn" class="btn btn-warning">Переключити на LIVE</button>
+                        <span>Режим виконання:</span>
+                        <div class="mode-btn-group">
+                            <button id="btn-exec-paper" class="btn-mode active-chill">🧪 Демо ($10)</button>
+                            <button id="btn-exec-live" class="btn-mode">⚡ Live (Bybit)</button>
+                        </div>
                     </div>
 
                     <div class="control-row">
@@ -105,12 +108,20 @@
                     </div>
 
                     <div class="control-row">
-                        <span>Провайдер ШІ-Аналітика:</span>
+                        <span>ШІ-Аналітик (Провайдер):</span>
                         <select id="provider-select" class="input-field select-field" style="width: auto; margin-bottom: 0;">
-                            <option value="deepseek">🤖 DeepSeek (V3 / R1)</option>
+                            <option value="deepseek">🤖 DeepSeek-V3 / Chat</option>
                             <option value="gemini">💎 Google Gemini 1.5</option>
                             <option value="openai">🧠 OpenAI GPT-4o-mini</option>
                         </select>
+                    </div>
+
+                    <div class="control-row" style="flex-direction: column; align-items: flex-start; gap: 6px; margin-top: 4px;">
+                        <span style="font-size: 0.85rem; color: #a0aec0;">🔑 API Ключ ШІ (DeepSeek / OpenAI):</span>
+                        <div style="display: flex; gap: 8px; width: 100%;">
+                            <input type="password" id="llm-key-input" class="input-field" placeholder="Введіть sk-..." style="flex: 1; margin-bottom: 0; padding: 6px 12px; font-size: 0.85rem;" />
+                            <button id="save-llm-key-btn" class="btn btn-primary" style="padding: 6px 12px; font-size: 0.85rem;">Зберегти</button>
+                        </div>
                     </div>
 
                     <div class="control-row">
@@ -119,6 +130,7 @@
                             <option value="SHIB/USDT">SHIB / USDT (15m)</option>
                             <option value="SOL/USDT">SOL / USDT (15m)</option>
                             <option value="BTC/USDT">BTC / USDT (15m)</option>
+                            <option value="ETH/USDT">ETH / USDT (15m)</option>
                         </select>
                     </div>
                 </div>

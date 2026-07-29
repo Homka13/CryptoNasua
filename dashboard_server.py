@@ -99,11 +99,20 @@ class DashboardServer:
             usdt_free = 0.0
             usdt_total = 0.0
             usdt_used = 0.0
+        
+        real_usdt = None
+        try:
+            real_bal = self.bot.exchange.fetch_real_balance()
+            if real_bal and 'USDT' in real_bal:
+                real_usdt = real_bal['USDT'].get('total', real_bal['USDT'].get('free', 0.0))
+        except Exception:
+            pass
 
         payload = {
             'symbol': config.symbol,
             'timeframe': config.timeframe,
             'mode': 'PAPER TRADING' if config.paper_trading else 'LIVE BYBIT',
+            'paper_trading': config.paper_trading,
             'is_active': self.bot.telegram.is_active,
             'current_price': meta.get('price', 0.0),
             'rsi': meta.get('rsi', 0.0),
@@ -113,9 +122,11 @@ class DashboardServer:
             'usdt_balance': usdt_free,
             'usdt_total': usdt_total,
             'usdt_used': usdt_used,
+            'real_usdt_balance': real_usdt,
             'initial_capital': config.initial_capital,
             'llm_enabled': config.use_llm_confirmation,
             'llm_provider': config.llm_provider.upper(),
+            'deepseek_api_key_set': bool(config.deepseek_api_key or config.llm_api_key),
             'trading_mode': config.trading_mode,
             'trading_mode_display': config.trading_mode_display,
             'min_llm_confidence': config.min_llm_confidence,
@@ -127,13 +138,8 @@ class DashboardServer:
         if not self._verify_session(request):
             return web.json_response({'error': 'Unauthorized'}, status=401)
 
-        # In paper mode return mock/history orders
-        history = getattr(self.bot.exchange.paper, 'closed_orders', []) if config.paper_trading else []
-        payload = {
-            'pending_review': getattr(self.bot, 'pending_llm_review', []),
-            'order_history': history
-        }
-        return web.json_response(payload)
+        orders = self.bot.exchange.paper.trades_history if self.bot.exchange.paper else []
+        return web.json_response(orders)
 
     async def handle_post_control(self, request: web.Request) -> web.Response:
         if not self._verify_session(request):
@@ -153,6 +159,18 @@ class DashboardServer:
                 config.paper_trading = not config.paper_trading
                 self.bot.exchange.is_paper = config.paper_trading
                 return web.json_response({'success': True, 'paper_trading': config.paper_trading})
+            elif action == 'set_execution_mode':
+                mode = body.get('mode', 'paper')
+                config.paper_trading = (mode.lower() == 'paper')
+                self.bot.exchange.is_paper = config.paper_trading
+                return web.json_response({'success': True, 'paper_trading': config.paper_trading})
+            elif action == 'set_llm_key':
+                key = body.get('key', '').strip()
+                if key:
+                    config.deepseek_api_key = key
+                    config.llm_api_key = key
+                    return web.json_response({'success': True, 'message': 'API Key set successfully'})
+                return web.json_response({'success': False, 'error': 'Key cannot be empty'}, status=400)
             elif action == 'set_trading_mode':
                 new_mode = body.get('mode', 'chill').lower()
                 if new_mode in ('chill', 'hunt'):
