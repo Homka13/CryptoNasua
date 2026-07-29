@@ -1,4 +1,5 @@
 import os
+import json
 import time
 import logging
 import asyncio
@@ -83,9 +84,21 @@ class ExchangeService:
         if "your_bybit_api_key" in api_key.lower():
             api_key = ""  # Ignore placeholder
 
-        secret_val = config.bybit_api_secret.strip()
-        if "your_bybit_api_secret" in secret_val.lower():
-            secret_val = ""
+        # Check OAuth token file if no API key provided
+        if not api_key:
+            appdata = os.getenv("APPDATA", "")
+            oauth_path = os.path.join(appdata, "bybit", "oauth_token.json") if appdata else os.path.expanduser("~/.bybit/oauth_token.json")
+            if os.path.exists(oauth_path):
+                try:
+                    with open(oauth_path, 'r', encoding='utf-8') as f:
+                        oauth_data = json.load(f)
+                    ai_acc = oauth_data.get('ai-account', {})
+                    if ai_acc.get('api_key') and ai_acc.get('api_secret'):
+                        api_key = ai_acc['api_key']
+                        secret_val = ai_acc['api_secret']
+                        logger.info("🔑 Bybit OAuth AI Account credentials loaded from oauth_token.json!")
+                except Exception as e:
+                    logger.error(f"Error reading OAuth token file: {e}")
 
         if config.bybit_private_key_path and os.path.exists(config.bybit_private_key_path):
             try:
