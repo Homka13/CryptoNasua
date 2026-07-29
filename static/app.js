@@ -2,7 +2,16 @@ function initApp() {
     const loginModal = document.getElementById('login-modal');
     const dashboard = document.getElementById('dashboard');
     const loginBtn = document.getElementById('login-btn');
+    const registerBtn = document.getElementById('register-btn');
+    const tabLoginBtn = document.getElementById('tab-login-btn');
+    const tabRegisterBtn = document.getElementById('tab-register-btn');
+    const loginFormBox = document.getElementById('login-form-box');
+    const registerFormBox = document.getElementById('register-form-box');
     const emailInput = document.getElementById('email-input');
+    const passwordInput = document.getElementById('password-input');
+    const regEmailInput = document.getElementById('reg-email-input');
+    const regPasswordInput = document.getElementById('reg-password-input');
+    const regConfirmPasswordInput = document.getElementById('reg-confirm-password-input');
     const loginError = document.getElementById('login-error');
     const logoutBtn = document.getElementById('logout-btn');
     const userEmailDisplay = document.getElementById('user-email-display');
@@ -14,19 +23,41 @@ function initApp() {
         showDashboard();
     }
 
+    // Auth Tabs Switching
+    tabLoginBtn?.addEventListener('click', () => {
+        tabLoginBtn.className = "btn btn-sm btn-primary";
+        tabRegisterBtn.className = "btn btn-sm btn-outline";
+        loginFormBox?.classList.remove('hidden');
+        registerFormBox?.classList.add('hidden');
+        if (loginError) loginError.style.display = 'none';
+    });
+
+    tabRegisterBtn?.addEventListener('click', () => {
+        tabRegisterBtn.className = "btn btn-sm btn-primary";
+        tabLoginBtn.className = "btn btn-sm btn-outline";
+        registerFormBox?.classList.remove('hidden');
+        loginFormBox?.classList.add('hidden');
+        if (loginError) loginError.style.display = 'none';
+    });
+
+    // Login Submission
     loginBtn?.addEventListener('click', async () => {
         const email = emailInput ? emailInput.value.trim() : '';
+        const password = passwordInput ? passwordInput.value : '';
         if (!email) {
-            showError("Будь ласка, введіть вашу Google пошту.");
+            showError("Будь ласка, введіть ваш Email.");
             return;
         }
 
         try {
             if (loginBtn) loginBtn.disabled = true;
-            const resp = await fetch('/api/auth/google', {
+            const endpoint = password ? '/api/auth/login' : '/api/auth/google';
+            const bodyPayload = password ? { email, password } : { email };
+
+            const resp = await fetch(endpoint, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ email })
+                body: JSON.stringify(bodyPayload)
             });
             const data = await resp.json();
 
@@ -43,6 +74,50 @@ function initApp() {
             showError("Не вдалося з'єднатися з сервером");
         } finally {
             if (loginBtn) loginBtn.disabled = false;
+        }
+    });
+
+    // Registration Submission
+    registerBtn?.addEventListener('click', async () => {
+        const email = regEmailInput ? regEmailInput.value.trim() : '';
+        const password = regPasswordInput ? regPasswordInput.value : '';
+        const confirmPwd = regConfirmPasswordInput ? regConfirmPasswordInput.value : '';
+
+        if (!email) {
+            showError("Введіть ваші дані для реєстрації.");
+            return;
+        }
+        if (password.length < 6) {
+            showError("Пароль має бути щонайменше 6 символів.");
+            return;
+        }
+        if (password !== confirmPwd) {
+            showError("Паролі не співпадають!");
+            return;
+        }
+
+        try {
+            if (registerBtn) registerBtn.disabled = true;
+            const resp = await fetch('/api/auth/register', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ email, password })
+            });
+            const data = await resp.json();
+
+            if (data.success) {
+                authToken = data.token;
+                userEmail = data.email;
+                localStorage.setItem('bot_auth_token', authToken);
+                localStorage.setItem('bot_user_email', userEmail);
+                showDashboard();
+            } else {
+                showError(data.error || "Помилка реєстрації");
+            }
+        } catch (err) {
+            showError("Не вдалося з'єднатися з сервером при реєстрації");
+        } finally {
+            if (registerBtn) registerBtn.disabled = false;
         }
     });
 

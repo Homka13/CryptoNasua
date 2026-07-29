@@ -16,15 +16,34 @@
     <div id="login-modal" class="modal-overlay">
         <div class="glass-card login-card">
             <div class="logo-badge">🤖 Bybit Bot Private</div>
-            <h2>Приватна Авторизація</h2>
-            <p>Доступ дозволено лише для верифікованого Google-акаунта власника.</p>
+            <h2>Авторизація та Реєстрація</h2>
+            <p>Увійдіть у власний акаунт або зареєструйтесь для доступу до панелі управління.</p>
             
             <div id="login-error" class="alert-box alert-danger hidden"></div>
             
-            <div class="demo-auth-box">
-                <label>Введіть ваш Google Email:</label>
-                <input type="email" id="email-input" placeholder="example@gmail.com" class="input-field">
-                <button id="login-btn" class="btn btn-primary">Увійти з Google</button>
+            <div class="auth-tabs" style="display: flex; gap: 10px; margin: 15px 0; border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 8px;">
+                <button id="tab-login-btn" class="btn btn-sm btn-primary" style="flex: 1;">🔑 Вхід</button>
+                <button id="tab-register-btn" class="btn btn-sm btn-outline" style="flex: 1;">📝 Реєстрація</button>
+            </div>
+
+            <!-- LOGIN FORM -->
+            <div id="login-form-box" class="demo-auth-box">
+                <label>Email адреса:</label>
+                <input type="email" id="email-input" placeholder="example@gmail.com" class="input-field" style="margin-bottom: 10px;">
+                <label>Пароль (опціонально для Google Auth):</label>
+                <input type="password" id="password-input" placeholder="••••••••" class="input-field" style="margin-bottom: 15px;">
+                <button id="login-btn" class="btn btn-primary" style="width: 100%;">Увійти</button>
+            </div>
+
+            <!-- REGISTER FORM -->
+            <div id="register-form-box" class="demo-auth-box hidden">
+                <label>Ваш Email:</label>
+                <input type="email" id="reg-email-input" placeholder="newuser@gmail.com" class="input-field" style="margin-bottom: 10px;">
+                <label>Придумайте Пароль:</label>
+                <input type="password" id="reg-password-input" placeholder="Мін. 6 символів" class="input-field" style="margin-bottom: 10px;">
+                <label>Підтвердіть Пароль:</label>
+                <input type="password" id="reg-confirm-password-input" placeholder="Повторіть пароль" class="input-field" style="margin-bottom: 15px;">
+                <button id="register-btn" class="btn btn-success" style="width: 100%;">Зареєструватися</button>
             </div>
         </div>
     </div>
@@ -180,6 +199,6 @@
         </section>
     </div>
 
-    <script src="/static/app.js?v=20260729_v16"></script>
+    <script src="/static/app.js?v=20260729_v17"></script>
 </body>
 </html>

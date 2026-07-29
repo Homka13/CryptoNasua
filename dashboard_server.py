@@ -22,6 +22,8 @@ class DashboardServer:
     def _setup_routes(self):
         self.app.router.add_get('/', self.handle_index)
         self.app.router.add_post('/api/auth/google', self.handle_google_auth)
+        self.app.router.add_post('/api/auth/register', self.handle_register)
+        self.app.router.add_post('/api/auth/login', self.handle_password_login)
         self.app.router.add_get('/api/status', self.handle_get_status)
         self.app.router.add_get('/api/orders', self.handle_get_orders)
         self.app.router.add_post('/api/control', self.handle_post_control)
@@ -37,6 +39,54 @@ class DashboardServer:
             with open(static_index, 'r', encoding='utf-8') as f:
                 return web.Response(text=f.read(), content_type='text/html')
         return web.Response(text="<h1>Web Dashboard static/index.html missing</h1>", content_type='text/html')
+
+    async def handle_register(self, request: web.Request) -> web.Response:
+        """Handles new user account registration."""
+        try:
+            body = await request.json()
+            email = body.get('email', '').strip().lower()
+            password = body.get('password', '')
+
+            from user_manager import user_manager
+            success, msg = user_manager.register_user(email, password)
+            if not success:
+                return web.json_response({'success': False, 'error': msg}, status=400)
+
+            session_token = f"session_{email}"
+            self.authenticated_sessions.add(session_token)
+
+            return web.json_response({
+                'success': True,
+                'token': session_token,
+                'email': email,
+                'message': msg
+            })
+        except Exception as e:
+            return web.json_response({'success': False, 'error': str(e)}, status=400)
+
+    async def handle_password_login(self, request: web.Request) -> web.Response:
+        """Handles password-based user authentication."""
+        try:
+            body = await request.json()
+            email = body.get('email', '').strip().lower()
+            password = body.get('password', '')
+
+            from user_manager import user_manager
+            success, msg, user = user_manager.authenticate_user(email, password)
+            if not success:
+                return web.json_response({'success': False, 'error': msg}, status=401)
+
+            session_token = f"session_{email}"
+            self.authenticated_sessions.add(session_token)
+
+            return web.json_response({
+                'success': True,
+                'token': session_token,
+                'email': email,
+                'message': msg
+            })
+        except Exception as e:
+            return web.json_response({'success': False, 'error': str(e)}, status=400)
 
     async def handle_google_auth(self, request: web.Request) -> web.Response:
         """Authenticates Google OAuth user email against ALLOWED_GOOGLE_EMAIL whitelist."""
