@@ -77,6 +77,20 @@ class HybridStrategy:
         is_bullish_trend = ema_fast_val >= ema_slow_val
         is_oversold = rsi_val <= self.rsi_oversold
 
+        # --- 🔥 ЛОВЕЦЬ ВІДСКОКІВ (ULTRA-DIP REVERSAL: RSI < 25) ---
+        prev_candle = df_calc.iloc[-2]
+        prev_rsi = float(prev_candle['rsi'])
+
+        # Extreme oversold condition (current RSI < 25 OR previous candle RSI < 25)
+        if rsi_val <= 25.0 or prev_rsi <= 25.0:
+            current_candle = latest
+            is_green_candle = float(current_candle['close']) > float(current_candle['open'])
+            is_price_rebounding = float(current_candle['close']) > float(prev_candle['close'])
+
+            if is_green_candle or is_price_rebounding:
+                return 'BUY', f'⚡ ЛОВЕЦЬ ВІДСКОКІВ [Ultra-Dip Reversal] (RSI: {rsi_val:.1f} < 25, Перша зелена свічка розвороту)', metadata
+
+        # Standard Bullish Trend Oversold Entry
         if is_oversold and is_bullish_trend:
             return 'BUY', f'🟢 RSI OVERSOLD ({rsi_val:.1f} <= {self.rsi_oversold}) in Bullish Trend', metadata
 
