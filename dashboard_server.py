@@ -178,6 +178,7 @@ class DashboardServer:
             'trading_mode': config.trading_mode,
             'trading_mode_display': config.trading_mode_display,
             'min_llm_confidence': config.min_llm_confidence,
+            'prevent_sleep': getattr(config, 'prevent_sleep', True),
             'active_position': self.bot.current_position,
             'scan_logs': list(getattr(self.bot, 'scan_logs', []))
         }
@@ -210,6 +211,11 @@ class DashboardServer:
             elif action == 'resume':
                 self.bot.telegram.is_active = True
                 return web.json_response({'success': True, 'is_active': True})
+            elif action == 'toggle_prevent_sleep':
+                config.prevent_sleep = not getattr(config, 'prevent_sleep', True)
+                from main import set_prevent_sleep
+                set_prevent_sleep(config.prevent_sleep)
+                return web.json_response({'success': True, 'prevent_sleep': config.prevent_sleep})
             elif action == 'toggle_mode':
                 config.paper_trading = not config.paper_trading
                 self.bot.exchange.is_paper = config.paper_trading

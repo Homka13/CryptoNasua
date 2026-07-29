@@ -7,6 +7,25 @@ import sys
 import io
 from typing import Dict, Any, Optional
 
+# Prevent Windows System Sleep function
+def set_prevent_sleep(enabled: bool):
+    if sys.platform == "win32":
+        try:
+            import ctypes
+            ES_CONTINUOUS = 0x80000000
+            ES_SYSTEM_REQUIRED = 0x00000001
+            if enabled:
+                ctypes.windll.kernel32.SetThreadExecutionState(ES_CONTINUOUS | ES_SYSTEM_REQUIRED)
+                logging.info("💤 Windows 24/7 Anti-Sleep Prevention: ENABLED.")
+            else:
+                ctypes.windll.kernel32.SetThreadExecutionState(ES_CONTINUOUS)
+                logging.info("💤 Windows 24/7 Anti-Sleep Prevention: DISABLED.")
+        except Exception as e:
+            logging.warning(f"Could not update Windows execution state: {e}")
+
+if getattr(config, 'prevent_sleep', True):
+    set_prevent_sleep(True)
+
 # Force UTF-8 encoding for Windows console to support emojis in logs
 if sys.platform == "win32":
     sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8', errors='replace')

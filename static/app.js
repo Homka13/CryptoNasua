@@ -263,10 +263,21 @@ function initApp() {
                     llmBadge.style.color = '#48bb78';
                     llmBadge.style.borderColor = 'rgba(72, 187, 120, 0.4)';
                 } else {
-                    llmBadge.innerText = '🔴 Ключ відсутній';
+                    llmBadge.innerText = '🔴 Ключ не налаштовано';
                     llmBadge.style.background = 'rgba(245, 101, 101, 0.2)';
                     llmBadge.style.color = '#f56565';
                     llmBadge.style.borderColor = 'rgba(245, 101, 101, 0.4)';
+                }
+            }
+
+            const sleepBtn = document.getElementById('toggle-sleep-btn');
+            if (sleepBtn) {
+                if (data.prevent_sleep) {
+                    sleepBtn.innerText = '💤 24/7 АКТИВНИЙ';
+                    sleepBtn.className = 'btn btn-sm btn-success';
+                } else {
+                    sleepBtn.innerText = '🌙 ЗВИЧАЙНИЙ РЕЖИМ';
+                    sleepBtn.className = 'btn btn-sm btn-outline';
                 }
             }
 
@@ -484,6 +495,15 @@ function initApp() {
             method: 'POST',
             headers: { 'Authorization': `Bearer ${authToken}`, 'Content-Type': 'application/json' },
             body: JSON.stringify({ action: 'set_llm_provider', provider })
+        });
+        fetchStatus();
+    });
+
+    document.getElementById('toggle-sleep-btn')?.addEventListener('click', async () => {
+        await fetch('/api/control', {
+            method: 'POST',
+            headers: { 'Authorization': `Bearer ${authToken}`, 'Content-Type': 'application/json' },
+            body: JSON.stringify({ action: 'toggle_prevent_sleep' })
         });
         fetchStatus();
     });
