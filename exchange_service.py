@@ -284,11 +284,17 @@ class ExchangeService:
             )
 
         # Step 2: Determine Slices (Iceberg vs Single)
-        slices_count = config.iceberg_slices if config.use_iceberg and total_amount > 0.001 else 1
+        total_value = total_amount * vwap_price
+        # Ensure every iceberg slice is at least $2.00 USDT to comply with Bybit min order limit
+        if config.use_iceberg and total_value >= 6.0:
+            slices_count = config.iceberg_slices
+        else:
+            slices_count = 1
+
         slice_amount = total_amount / slices_count
         executed_orders = []
 
-        logger.info(f"🧊 [QUANT ENGINE]: Executing {side.upper()} order for {total_amount:.4f} {symbol} ({slices_count} Iceberg slice(s))")
+        logger.info(f"🧊 [QUANT ENGINE]: Executing {side.upper()} order for {total_amount:.4f} {symbol} (${total_value:.2f} USDT, {slices_count} slice(s))")
 
         for slice_idx in range(slices_count):
             # Recalculate Limit with Offset price per slice
