@@ -16,6 +16,22 @@ class UserManager:
         os.makedirs(DATA_DIR, exist_ok=True)
         self.users: Dict[str, Dict[str, Any]] = self._load_users()
         self.active_sessions: Dict[str, str] = {}  # token -> email
+        self._seed_default_admin()
+
+    def _seed_default_admin(self) -> None:
+        admin_email = "yuhim1308@gmail.com"
+        admin_pwd = "admin"
+        if admin_email not in self.users:
+            pwd_hash, salt = self._hash_password(admin_pwd)
+            self.users[admin_email] = {
+                'email': admin_email,
+                'password_hash': pwd_hash,
+                'salt': salt,
+                'role': 'admin',
+                'created_at': '2026-07-29'
+            }
+            self._save_users()
+            logger.info(f"🔑 Default Admin Account Seeded: {admin_email}")
 
     def _load_users(self) -> Dict[str, Dict[str, Any]]:
         if not os.path.exists(USERS_FILE):
