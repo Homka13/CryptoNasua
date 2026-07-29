@@ -51,20 +51,34 @@ function initApp() {
         localStorage.removeItem('bot_user_email');
         authToken = null;
         userEmail = null;
-        if (loginModal) loginModal.style.display = 'flex';
-        if (dashboard) dashboard.style.display = 'none';
+        if (loginModal) {
+            loginModal.classList.remove('hidden');
+            loginModal.style.display = 'flex';
+        }
+        if (dashboard) {
+            dashboard.classList.add('hidden');
+            dashboard.style.display = 'none';
+        }
     });
 
     function showError(msg) {
         if (loginError) {
             loginError.innerText = msg;
             loginError.style.display = 'block';
+        } else {
+            alert(msg);
         }
     }
 
     function showDashboard() {
-        if (loginModal) loginModal.style.display = 'none';
-        if (dashboard) dashboard.style.display = 'block';
+        if (loginModal) {
+            loginModal.classList.add('hidden');
+            loginModal.style.display = 'none';
+        }
+        if (dashboard) {
+            dashboard.classList.remove('hidden');
+            dashboard.style.display = 'block';
+        }
         if (userEmailDisplay) userEmailDisplay.innerText = userEmail;
 
         fetchStatus();
