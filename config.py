@@ -1,5 +1,5 @@
 import os
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -43,6 +43,14 @@ class TradingConfig:
 
     # Capital & Market Settings
     symbol: str = os.getenv("SYMBOL", "SOL/USDT")
+    use_dynamic_market_screener: bool = os.getenv("USE_DYNAMIC_SCREENER", "true").lower() == "true"
+    min_screener_volume_usdt: float = 5000000.0  # Min 5 Million USDT 24h volume
+    screener_top_limit: int = 12                 # Select Top 12 most volatile high-volume pairs
+    trading_pairs: list = field(default_factory=lambda: [
+        "WIF/USDT", "PEPE/USDT", "BONK/USDT", "FLOKI/USDT", 
+        "SUI/USDT", "NEAR/USDT", "FET/USDT", "SOL/USDT", "DOGE/USDT"
+    ])
+    multi_pair_scan: bool = os.getenv("MULTI_PAIR_SCAN", "true").lower() == "true"
     timeframe: str = os.getenv("TIMEFRAME", "15m")
     initial_capital: float = float(os.getenv("INITIAL_CAPITAL", "10.0"))
     trade_size_usdt: float = float(os.getenv("TRADE_SIZE_USDT", "2.5"))

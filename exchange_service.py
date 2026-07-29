@@ -177,6 +177,49 @@ class ExchangeService:
             logger.debug(f"Could not fetch real Bybit balance: {e}")
             return {}
 
+    def fetch_dynamic_hot_pairs(self, min_volume: float = config.min_screener_volume_usdt, limit: int = config.screener_top_limit) -> List[str]:
+        """
+        Algorithmic Dynamic Market Screener:
+        Scans all Bybit spot pairs in real-time, filters for minimum 24h volume ($5M+),
+        and ranks the Top N most volatile hot trading pairs dynamically.
+        """
+        try:
+            tickers = self.exchange.fetch_tickers()
+            candidates = []
+
+            for symbol, t in tickers.items():
+                if not symbol.endswith('/USDT'):
+                    continue
+                # Exclude leveraged tokens or stablecoin pairs
+                if any(x in symbol for x in ['3L', '3S', 'BEAR', 'BULL', 'USDC', 'DAI', 'FDUSD', 'EUR']):
+                    continue
+                
+                quote_vol = float(t.get('quoteVolume') or t.get('baseVolume', 0) * t.get('last', 0))
+                high = float(t.get('high') or 0)
+                low = float(t.get('low') or 0)
+
+                if quote_vol < min_volume or low == 0:
+                    continue
+
+                volatility_pct = (high - low) / low
+                candidates.append({
+                    'symbol': symbol,
+                    'volume_usdt': quote_vol,
+                    'volatility': volatility_pct
+                })
+
+            # Sort descending by 24h Volatility %
+            candidates.sort(key=lambda x: x['volatility'], reverse=True)
+            hot_symbols = [c['symbol'] for c in candidates[:limit]]
+            
+            if hot_symbols:
+                logger.info(f"🔥 [DYNAMIC SCREENER]: Auto-discovered {len(hot_symbols)} hot volatile pairs: {hot_symbols[:5]}...")
+                return hot_symbols
+            return config.trading_pairs
+        except Exception as e:
+            logger.error(f"Error running Dynamic Market Screener: {e}. Falling back to default list.")
+            return config.trading_pairs
+
     def calculate_orderbook_vwap(self, symbol: str, amount: float, side: str) -> Tuple[float, float, float]:
         """
         Calculates the Volume-Weighted Average Price (VWAP) against live orderbook depth.

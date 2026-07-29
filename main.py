@@ -104,11 +104,16 @@ class TradingBot:
                     await asyncio.sleep(5)
                     continue
 
-                symbols_to_scan = ["SHIB/USDT", "SOL/USDT", "BTC/USDT", "ETH/USDT", "DOGE/USDT", "PEPE/USDT"] if config.symbol == "AUTO" else [config.symbol]
-                
-                # If holding position, scan active position's symbol
                 if self.current_position and 'symbol' in self.current_position:
                     symbols_to_scan = [self.current_position['symbol']]
+                elif getattr(config, 'use_dynamic_market_screener', False) and hasattr(self.exchange, 'fetch_dynamic_hot_pairs'):
+                    symbols_to_scan = self.exchange.fetch_dynamic_hot_pairs()
+                elif getattr(config, 'multi_pair_scan', False) and hasattr(config, 'trading_pairs'):
+                    symbols_to_scan = config.trading_pairs
+                elif config.symbol == "AUTO":
+                    symbols_to_scan = ["SHIB/USDT", "SOL/USDT", "BTC/USDT", "ETH/USDT", "DOGE/USDT", "PEPE/USDT"]
+                else:
+                    symbols_to_scan = [config.symbol]
 
                 best_buy_opportunity = None
 
