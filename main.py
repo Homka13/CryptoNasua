@@ -6,6 +6,7 @@ import logging
 import sys
 import io
 from typing import Dict, Any, Optional
+from config import config
 
 # Prevent Windows System Sleep function
 def set_prevent_sleep(enabled: bool):
@@ -31,7 +32,6 @@ if sys.platform == "win32":
     sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8', errors='replace')
     sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8', errors='replace')
 
-from config import config
 from exchange_service import ExchangeService
 from strategy import HybridStrategy
 from risk_manager import RiskManager
