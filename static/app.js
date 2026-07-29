@@ -180,9 +180,24 @@ function initApp() {
                 providerSelect.value = data.llm_provider.toLowerCase();
             }
 
+            const llmBadge = document.getElementById('llm-key-status-badge');
+            if (llmBadge) {
+                if (data.llm_key_set && data.llm_key_masked) {
+                    llmBadge.innerText = `🟢 Підключено: ${data.llm_key_masked}`;
+                    llmBadge.style.background = 'rgba(72, 187, 120, 0.2)';
+                    llmBadge.style.color = '#48bb78';
+                    llmBadge.style.borderColor = 'rgba(72, 187, 120, 0.4)';
+                } else {
+                    llmBadge.innerText = '🔴 Ключ відсутній';
+                    llmBadge.style.background = 'rgba(245, 101, 101, 0.2)';
+                    llmBadge.style.color = '#f56565';
+                    llmBadge.style.borderColor = 'rgba(245, 101, 101, 0.4)';
+                }
+            }
+
             if (llmKeyInput && !llmKeyInput.value) {
                 if (data.llm_key_set && data.llm_key_masked) {
-                    llmKeyInput.placeholder = `🟢 Ключ підключено (${data.llm_key_masked})`;
+                    llmKeyInput.placeholder = `Ключ: ${data.llm_key_masked}`;
                 } else {
                     llmKeyInput.placeholder = "Введіть ваш sk-... ключ тут";
                 }

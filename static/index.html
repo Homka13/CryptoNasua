@@ -116,10 +116,13 @@
                         </select>
                     </div>
 
-                    <div style="display: flex; flex-direction: column; gap: 8px; width: 100%; margin: 8px 0; padding: 10px; background: rgba(255, 255, 255, 0.04); border-radius: 8px; border: 1px solid rgba(255, 255, 255, 0.08);">
-                        <span style="font-size: 0.85rem; color: #cbd5e0; font-weight: bold;">🔑 API Ключ ШІ (DeepSeek / OpenAI):</span>
+                    <div class="control-row" style="flex-direction: column; align-items: flex-start; gap: 6px;">
+                        <div style="display: flex; justify-content: space-between; width: 100%; align-items: center;">
+                            <span style="font-size: 0.85rem; color: #cbd5e0; font-weight: bold;">🔑 API Ключ ШІ (DeepSeek / OpenAI):</span>
+                            <span id="llm-key-status-badge" style="font-size: 0.75rem; font-weight: bold; padding: 2px 8px; border-radius: 4px; background: rgba(72, 187, 120, 0.2); color: #48bb78; border: 1px solid rgba(72, 187, 120, 0.4);">🟢 Перевірка...</span>
+                        </div>
                         <div style="display: flex; gap: 8px; width: 100%;">
-                            <input type="password" id="llm-key-input" class="input-field" placeholder="Введіть ваш sk-... ключ тут" style="flex: 1; min-width: 0; width: 100%; margin-bottom: 0; padding: 8px 12px; font-size: 0.85rem; background: rgba(15, 23, 42, 0.9); border: 1px solid rgba(255, 255, 255, 0.2); color: #fff; border-radius: 6px;" />
+                            <input type="text" id="llm-key-input" class="input-field" placeholder="sk-9935...34a" style="flex: 1; min-width: 0; width: 100%; margin-bottom: 0; padding: 8px 12px; font-size: 0.85rem; background: rgba(15, 23, 42, 0.9); border: 1px solid rgba(255, 255, 255, 0.2); color: #fff; border-radius: 6px;" />
                             <button id="save-llm-key-btn" class="btn btn-primary" style="padding: 8px 16px; font-size: 0.85rem; white-space: nowrap; font-weight: bold;">💾 Зберегти</button>
                         </div>
                     </div>
@@ -176,6 +179,6 @@
         </section>
     </div>
 
-    <script src="/static/app.js?v=20260729_v11"></script>
+    <script src="/static/app.js?v=20260729_v12"></script>
 </body>
 </html>
