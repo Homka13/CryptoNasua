@@ -56,7 +56,7 @@ class TradingConfig:
     initial_capital: float = float(os.getenv("INITIAL_CAPITAL", "10.0"))
     trade_size_usdt: float = float(os.getenv("TRADE_SIZE_USDT", "2.5"))
     max_active_orders: int = 3
-    min_order_usdt: float = 1.0  # Bybit minimum spot order value is ~1 USDT
+    min_order_usdt: float = 2.5  # Bybit minimum spot order value is ~2.0 to 2.5 USDT
 
     # Risk Management
     stop_loss_pct: float = 0.02   # 2.0% Stop Loss
