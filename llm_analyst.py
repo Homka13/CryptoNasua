@@ -18,7 +18,7 @@ class LLMAnalyst:
         Returns: (is_confirmed: bool, llm_explanation: str)
         """
         provider = config.llm_provider.lower()
-        api_key = config.deepseek_api_key if provider == "deepseek" else config.llm_api_key
+        api_key = (config.deepseek_api_key or config.llm_api_key).strip() if provider == "deepseek" else (config.llm_api_key or config.deepseek_api_key).strip()
 
         if not self.enabled or not api_key:
             return True, "LLM filter disabled or API key missing (Defaulting to technical signal)"

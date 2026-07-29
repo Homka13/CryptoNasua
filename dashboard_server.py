@@ -139,7 +139,7 @@ class DashboardServer:
         if not self._verify_session(request):
             return web.json_response({'error': 'Unauthorized'}, status=401)
 
-        orders = self.bot.exchange.paper.trades_history if self.bot.exchange.paper else []
+        orders = getattr(self.bot.exchange.paper, 'closed_orders', []) if (self.bot.exchange and self.bot.exchange.paper) else []
         return web.json_response(orders)
 
     async def handle_post_control(self, request: web.Request) -> web.Response:
@@ -164,6 +164,7 @@ class DashboardServer:
                 mode = body.get('mode', 'paper')
                 config.paper_trading = (mode.lower() == 'paper')
                 self.bot.exchange.is_paper = config.paper_trading
+                logger.info(f"🌐 Execution Mode Switched via Dashboard: {'PAPER TRADING' if config.paper_trading else 'LIVE BYBIT SPOT'}")
                 return web.json_response({'success': True, 'paper_trading': config.paper_trading})
             elif action == 'set_llm_key':
                 key = body.get('key', '').strip()
