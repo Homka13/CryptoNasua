@@ -106,12 +106,14 @@ class TradingBot:
 
                 if self.current_position and 'symbol' in self.current_position:
                     symbols_to_scan = [self.current_position['symbol']]
-                elif getattr(config, 'use_dynamic_market_screener', False) and hasattr(self.exchange, 'fetch_dynamic_hot_pairs'):
-                    symbols_to_scan = self.exchange.fetch_dynamic_hot_pairs()
+                elif config.symbol == "AUTO" or getattr(config, 'use_dynamic_market_screener', False):
+                    try:
+                        symbols_to_scan = self.exchange.fetch_dynamic_hot_pairs(min_volume=1000000.0, limit=10)
+                    except Exception as screener_err:
+                        logger.error(f"Dynamic Screener fallback error: {screener_err}")
+                        symbols_to_scan = ["SHIB/USDT", "SOL/USDT", "BTC/USDT", "ETH/USDT", "DOGE/USDT", "PEPE/USDT"]
                 elif getattr(config, 'multi_pair_scan', False) and hasattr(config, 'trading_pairs'):
                     symbols_to_scan = config.trading_pairs
-                elif config.symbol == "AUTO":
-                    symbols_to_scan = ["SHIB/USDT", "SOL/USDT", "BTC/USDT", "ETH/USDT", "DOGE/USDT", "PEPE/USDT"]
                 else:
                     symbols_to_scan = [config.symbol]
 
