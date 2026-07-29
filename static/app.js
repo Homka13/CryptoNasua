@@ -284,6 +284,19 @@ function initApp() {
                 }
             }
 
+            const execBtn = document.getElementById('toggle-execution-mode-btn');
+            if (execBtn) {
+                if (data.paper_trading) {
+                    execBtn.innerText = '🧪 Демо-Торгівля ($10 Paper)';
+                    execBtn.className = 'btn btn-sm btn-outline';
+                    execBtn.style.boxShadow = 'none';
+                } else {
+                    execBtn.innerText = '⚡ LIVE Торгівля (Bybit Real)';
+                    execBtn.className = 'btn btn-sm btn-danger';
+                    execBtn.style.boxShadow = '0 0 12px rgba(239, 68, 68, 0.5)';
+                }
+            }
+
             if (llmKeyInput && !llmKeyInput.value) {
                 if (data.llm_key_set && data.llm_key_masked) {
                     llmKeyInput.placeholder = `Ключ: ${data.llm_key_masked}`;
@@ -499,6 +512,15 @@ function initApp() {
             method: 'POST',
             headers: { 'Authorization': `Bearer ${authToken}`, 'Content-Type': 'application/json' },
             body: JSON.stringify({ action: 'set_llm_provider', provider })
+        });
+        fetchStatus();
+    });
+
+    document.getElementById('toggle-execution-mode-btn')?.addEventListener('click', async () => {
+        await fetch('/api/control', {
+            method: 'POST',
+            headers: { 'Authorization': `Bearer ${authToken}`, 'Content-Type': 'application/json' },
+            body: JSON.stringify({ action: 'toggle_mode' })
         });
         fetchStatus();
     });
