@@ -253,6 +253,13 @@ class DashboardServer:
                 config.paper_trading = not config.paper_trading
                 self.bot.exchange.is_paper = config.paper_trading
                 return web.json_response({'success': True, 'paper_trading': config.paper_trading})
+            elif action == 'close_position':
+                if self.bot.current_position:
+                    logger.info(f"🔴 Position manually closed via Web Dashboard UI for {self.bot.current_position.get('symbol')}")
+                    self.bot.current_position = None
+                    self.bot._save_position(None)
+                    return web.json_response({'success': True, 'message': 'Position closed successfully'})
+                return web.json_response({'success': False, 'error': 'No active position to close'}, status=400)
             elif action == 'set_execution_mode':
                 mode = body.get('mode', 'paper')
                 config.paper_trading = (mode.lower() == 'paper')

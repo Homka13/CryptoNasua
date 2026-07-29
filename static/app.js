@@ -327,23 +327,44 @@ function initApp() {
             updateWatchlistBar(data.scan_logs, data.active_position);
             updateTradingViewChart(currentChartSymbol, false);
 
-            const posContainer = document.getElementById('active-position-container');
-            if (posContainer) {
+            const posContent = document.getElementById('active-position-content');
+            if (posContent) {
                 if (data.active_position) {
                     const pos = data.active_position;
-                    const pnl = ((data.current_price - pos.entry_price) / pos.entry_price) * 100;
+                    const currPrice = data.latest_price || pos.entry_price;
+                    const pnl = ((currPrice - pos.entry_price) / pos.entry_price) * 100;
                     const pnlClass = pnl >= 0 ? 'text-green' : 'text-red';
-                    posContainer.innerHTML = `
-                        <div style="font-size: 1.1rem; margin-bottom: 8px;">
-                            <strong>${data.symbol}</strong> — ${pos.amount.toFixed(4)} монет
-                        </div>
-                        <div>Ціна входу: $${pos.entry_price.toFixed(4)} | Поточна: $${data.current_price.toFixed(4)}</div>
-                        <div class="${pnlClass}" style="font-size: 1.2rem; font-weight: 700; margin-top: 8px;">
-                            PnL: ${pnl >= 0 ? '+' : ''}${pnl.toFixed(2)}%
+                    posContent.innerHTML = `
+                        <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px;">
+                            <div>
+                                <div style="font-size: 1.1rem; margin-bottom: 4px;">
+                                    <strong>${pos.symbol}</strong> — ${pos.amount.toFixed(4)} монет
+                                </div>
+                                <div style="font-size: 0.85rem; color: #a0aec0;">
+                                    Ціна входу: $${pos.entry_price.toFixed(4)}
+                                </div>
+                                <div class="${pnlClass}" style="font-size: 1.2rem; font-weight: 700; margin-top: 4px;">
+                                    PnL: ${pnl >= 0 ? '+' : ''}${pnl.toFixed(2)}%
+                                </div>
+                            </div>
+                            <button id="close-position-btn" class="btn btn-sm btn-danger" style="font-weight: bold; padding: 8px 16px;">
+                                🔴 Закрити Позицію
+                            </button>
                         </div>
                     `;
+
+                    document.getElementById('close-position-btn')?.addEventListener('click', async () => {
+                        if (confirm(`Ви дійсно бажаєте вручну закрити позицію ${pos.symbol}?`)) {
+                            await fetch('/api/control', {
+                                method: 'POST',
+                                headers: { 'Authorization': `Bearer ${authToken}`, 'Content-Type': 'application/json' },
+                                body: JSON.stringify({ action: 'close_position' })
+                            });
+                            fetchStatus();
+                        }
+                    });
                 } else {
-                    posContainer.innerHTML = `<div class="empty-state">Немає відкритих угод (Сканування ринку...)</div>`;
+                    posContent.innerHTML = `<p class="text-muted" style="margin: 0;">Немає відкритих угод (Сканування ринку...)</p>`;
                 }
             }
 
