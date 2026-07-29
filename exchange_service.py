@@ -19,8 +19,9 @@ class PaperExchange:
         self.closed_orders: List[Dict[str, Any]] = []
         self.order_id_counter = 1000
 
-    def get_balance(self, symbol: str) -> Dict[str, float]:
-        base_currency = symbol.split('/')[0]
+    def get_balance(self, symbol: Optional[str] = None) -> Dict[str, float]:
+        target = symbol if symbol and symbol != "AUTO" else "SHIB/USDT"
+        base_currency = target.split('/')[0] if '/' in target else 'SHIB'
         return {
             'USDT': {'free': self.usdt_balance, 'used': 0.0, 'total': self.usdt_balance},
             base_currency: {'free': self.asset_balance, 'used': 0.0, 'total': self.asset_balance}
@@ -134,22 +135,29 @@ class ExchangeService:
         
         logger.info(f"Exchange initialized. Mode: {'PAPER TRADING' if self.is_paper else 'LIVE BYBIT SPOT'}")
 
-    def fetch_ticker(self, symbol: str = config.symbol) -> Dict[str, Any]:
+    def fetch_ticker(self, symbol: Optional[str] = None) -> Dict[str, Any]:
+        target = symbol or config.symbol
+        if not target or target == "AUTO":
+            target = "SHIB/USDT"
         try:
-            return self.public_exchange.fetch_ticker(symbol)
+            return self.public_exchange.fetch_ticker(target)
         except Exception as e:
-            logger.error(f"Error fetching ticker for {symbol}: {e}")
+            logger.error(f"Error fetching ticker for {target}: {e}")
             raise
 
-    def fetch_ohlcv(self, symbol: str = config.symbol, timeframe: str = config.timeframe, limit: int = 100) -> pd.DataFrame:
+    def fetch_ohlcv(self, symbol: Optional[str] = None, timeframe: Optional[str] = None, limit: int = 100) -> pd.DataFrame:
         """Fetches OHLCV candlestick data and returns a pandas DataFrame."""
+        target_symbol = symbol or config.symbol
+        if not target_symbol or target_symbol == "AUTO":
+            target_symbol = "SHIB/USDT"
+        tf = timeframe or config.timeframe
         try:
-            raw_candles = self.public_exchange.fetch_ohlcv(symbol, timeframe=timeframe, limit=limit)
+            raw_candles = self.public_exchange.fetch_ohlcv(target_symbol, timeframe=tf, limit=limit)
             df = pd.DataFrame(raw_candles, columns=['timestamp', 'open', 'high', 'low', 'close', 'volume'])
             df['datetime'] = pd.to_datetime(df['timestamp'], unit='ms')
             return df
         except Exception as e:
-            logger.error(f"Error fetching OHLCV for {symbol}: {e}")
+            logger.error(f"Error fetching OHLCV for {target_symbol}: {e}")
             raise
 
     def fetch_balance(self, symbol: str = config.symbol) -> Dict[str, Any]:
