@@ -27,10 +27,10 @@ def set_prevent_sleep(enabled: bool):
 if getattr(config, 'prevent_sleep', True):
     set_prevent_sleep(True)
 
-# Force UTF-8 encoding for Windows console to support emojis in logs
+# Force UTF-8 encoding for Windows console to support emojis in logs with instant unbuffered flushing
 if sys.platform == "win32":
-    sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8', errors='replace')
-    sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8', errors='replace')
+    sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8', errors='replace', write_through=True)
+    sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8', errors='replace', write_through=True)
 
 from exchange_service import ExchangeService
 from strategy import HybridStrategy
@@ -62,8 +62,8 @@ class TradingBot:
         self.scan_logs = deque(maxlen=30)
         self.ai_verdicts = deque(maxlen=30)
         
-        # Initialize trading_active flag (requires Web UI authentication)
-        self.trading_active = False
+        # Trading active flag
+        self.trading_active = True
 
         # Initialize LLM Analyst filter
         from llm_analyst import LLMAnalyst
@@ -321,6 +321,12 @@ class TradingBot:
             await asyncio.sleep(10)
 
 async def main():
+    print("=" * 65, flush=True)
+    print("🚀 CRYPTO TRADING BOT SERVER INITIALIZING...", flush=True)
+    print("🌐 WEB DASHBOARD: http://127.0.0.1:5001", flush=True)
+    print("🔑 LOGIN: yuhim1308@gmail.com | PASSWORD: admin", flush=True)
+    print("=" * 65, flush=True)
+
     bot = TradingBot()
     
     # Initialize & Start Private Web Dashboard Server
