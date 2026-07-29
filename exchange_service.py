@@ -69,25 +69,50 @@ class ExchangeService:
     def __init__(self):
         self.is_paper = config.paper_trading
         
-        secret_val = config.bybit_api_secret
+        # Initialize unauthenticated exchange for public market data (OHLCV, Tickers, Orderbook)
+        public_params = {
+            'enableRateLimit': True,
+            'options': {'defaultType': 'spot'}
+        }
+        if config.testnet:
+            public_params['urls'] = {'api': ccxt.bybit().urls['test']}
+        self.public_exchange = ccxt.bybit(public_params)
+        
+        # Prepare private exchange authentication
+        api_key = config.bybit_api_key.strip()
+        if "your_bybit_api_key" in api_key.lower():
+            api_key = ""  # Ignore placeholder
+
+        secret_val = config.bybit_api_secret.strip()
+        if "your_bybit_api_secret" in secret_val.lower():
+            secret_val = ""
+
         if config.bybit_private_key_path and os.path.exists(config.bybit_private_key_path):
-            with open(config.bybit_private_key_path, 'r', encoding='utf-8') as f:
-                secret_val = f.read()
-            logger.info("🔑 Bybit RSA Private Key loaded for API authentication.")
+            try:
+                with open(config.bybit_private_key_path, 'r', encoding='utf-8') as f:
+                    secret_val = f.read()
+                logger.info("🔑 Bybit RSA Private Key loaded for API authentication.")
+            except Exception as e:
+                logger.error(f"Error loading RSA Private Key file: {e}")
         elif os.path.exists("bybit_rsa_private.pem") and not secret_val:
-            with open("bybit_rsa_private.pem", 'r', encoding='utf-8') as f:
-                secret_val = f.read()
-            logger.info("🔑 Bybit RSA Private Key loaded from bybit_rsa_private.pem")
+            try:
+                with open("bybit_rsa_private.pem", 'r', encoding='utf-8') as f:
+                    secret_val = f.read()
+                logger.info("🔑 Bybit RSA Private Key loaded from bybit_rsa_private.pem")
+            except Exception as e:
+                logger.error(f"Error loading bybit_rsa_private.pem: {e}")
 
         exchange_params = {
-            'apiKey': config.bybit_api_key,
-            'secret': secret_val,
             'enableRateLimit': True,
             'options': {
                 'defaultType': 'spot'
             }
         }
-        
+        if api_key:
+            exchange_params['apiKey'] = api_key
+        if secret_val:
+            exchange_params['secret'] = secret_val
+
         if config.testnet:
             exchange_params['urls'] = {'api': ccxt.bybit().urls['test']}
             
@@ -98,7 +123,7 @@ class ExchangeService:
 
     def fetch_ticker(self, symbol: str = config.symbol) -> Dict[str, Any]:
         try:
-            return self.exchange.fetch_ticker(symbol)
+            return self.public_exchange.fetch_ticker(symbol)
         except Exception as e:
             logger.error(f"Error fetching ticker for {symbol}: {e}")
             raise
@@ -106,7 +131,7 @@ class ExchangeService:
     def fetch_ohlcv(self, symbol: str = config.symbol, timeframe: str = config.timeframe, limit: int = 100) -> pd.DataFrame:
         """Fetches OHLCV candlestick data and returns a pandas DataFrame."""
         try:
-            raw_candles = self.exchange.fetch_ohlcv(symbol, timeframe=timeframe, limit=limit)
+            raw_candles = self.public_exchange.fetch_ohlcv(symbol, timeframe=timeframe, limit=limit)
             df = pd.DataFrame(raw_candles, columns=['timestamp', 'open', 'high', 'low', 'close', 'volume'])
             df['datetime'] = pd.to_datetime(df['timestamp'], unit='ms')
             return df
@@ -129,7 +154,7 @@ class ExchangeService:
         Returns: (vwap_price, best_price, slippage_pct)
         """
         try:
-            orderbook = self.exchange.fetch_order_book(symbol, limit=20)
+            orderbook = self.public_exchange.fetch_order_book(symbol, limit=20)
             levels = orderbook['asks'] if side.lower() == 'buy' else orderbook['bids']
             
             if not levels:

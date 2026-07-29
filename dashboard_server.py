@@ -178,6 +178,19 @@ class DashboardServer:
     async def start(self):
         self.runner = web.AppRunner(self.app)
         await self.runner.setup()
-        self.site = web.TCPSite(self.runner, '127.0.0.1', config.dashboard_port)
-        await self.site.start()
-        logger.info(f"🌐 PRIVATE WEB DASHBOARD RUNNING AT: http://127.0.0.1:{config.dashboard_port}")
+        
+        ports_to_try = [config.dashboard_port] + [5001, 5002, 5005, 8080, 8081, 8888]
+        bound = False
+        for port in ports_to_try:
+            try:
+                self.site = web.TCPSite(self.runner, '127.0.0.1', port)
+                await self.site.start()
+                config.dashboard_port = port
+                logger.info(f"🌐 PRIVATE WEB DASHBOARD RUNNING AT: http://127.0.0.1:{port}")
+                bound = True
+                break
+            except Exception as e:
+                logger.warning(f"Could not bind Web Dashboard on port {port}: {e}. Trying alternative port...")
+
+        if not bound:
+            logger.error("❌ Failed to bind Web Dashboard on any fallback port.")
