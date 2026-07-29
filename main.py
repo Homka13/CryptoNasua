@@ -109,7 +109,7 @@ class TradingBot:
                     symbols_to_scan = [self.current_position['symbol']]
                 elif config.symbol == "AUTO" or getattr(config, 'use_dynamic_market_screener', False):
                     try:
-                        symbols_to_scan = self.exchange.fetch_dynamic_hot_pairs(min_volume=1000000.0, limit=10)
+                        symbols_to_scan = self.exchange.fetch_dynamic_hot_pairs(min_volume=1000000.0, limit=15)
                     except Exception as screener_err:
                         logger.error(f"Dynamic Screener fallback error: {screener_err}")
                         symbols_to_scan = ["SHIB/USDT", "SOL/USDT", "BTC/USDT", "ETH/USDT", "DOGE/USDT", "PEPE/USDT"]
