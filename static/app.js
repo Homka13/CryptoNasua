@@ -1,4 +1,4 @@
-document.addEventListener('DOMContentLoaded', () => {
+function initApp() {
     const loginModal = document.getElementById('login-modal');
     const dashboard = document.getElementById('dashboard');
     const loginBtn = document.getElementById('login-btn');
@@ -14,63 +14,59 @@ document.addEventListener('DOMContentLoaded', () => {
         showDashboard();
     }
 
-    loginBtn.addEventListener('click', async () => {
-        const email = emailInput.value.trim();
+    loginBtn?.addEventListener('click', async () => {
+        const email = emailInput ? emailInput.value.trim() : '';
         if (!email) {
             showError("Будь ласка, введіть вашу Google пошту.");
             return;
         }
 
         try {
-            loginBtn.disabled = true;
-            loginBtn.innerText = "Авторизація...";
-            loginError.classList.add('hidden');
-
+            if (loginBtn) loginBtn.disabled = true;
             const resp = await fetch('/api/auth/google', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ email })
             });
-
             const data = await resp.json();
 
-            if (resp.ok && data.success) {
+            if (data.success) {
                 authToken = data.token;
                 userEmail = data.email;
                 localStorage.setItem('bot_auth_token', authToken);
                 localStorage.setItem('bot_user_email', userEmail);
                 showDashboard();
             } else {
-                showError(data.error || "Помилка авторизації. Доступ заборонено.");
+                showError(data.error || "Помилка авторизації");
             }
         } catch (err) {
-            showError("Не вдалося з'єднатися із сервером: " + err.message);
+            showError("Не вдалося з'єднатися з сервером");
         } finally {
-            loginBtn.disabled = false;
-            loginBtn.innerText = "Увійти з Google";
+            if (loginBtn) loginBtn.disabled = false;
         }
     });
 
-    logoutBtn.addEventListener('click', () => {
+    logoutBtn?.addEventListener('click', () => {
         localStorage.removeItem('bot_auth_token');
         localStorage.removeItem('bot_user_email');
-        location.reload();
+        authToken = null;
+        userEmail = null;
+        if (loginModal) loginModal.style.display = 'flex';
+        if (dashboard) dashboard.style.display = 'none';
     });
 
     function showError(msg) {
-        loginError.innerText = msg;
-        loginError.classList.remove('hidden');
+        if (loginError) {
+            loginError.innerText = msg;
+            loginError.style.display = 'block';
+        }
     }
 
     function showDashboard() {
-        loginModal.classList.add('hidden');
-        dashboard.classList.remove('hidden');
-        userEmailDisplay.innerText = userEmail;
-        startDashboardPolling();
-    }
+        if (loginModal) loginModal.style.display = 'none';
+        if (dashboard) dashboard.style.display = 'block';
+        if (userEmailDisplay) userEmailDisplay.innerText = userEmail;
 
-    // Real-time Polling Engine
-    function startDashboardPolling() {
         fetchStatus();
         fetchOrders();
         setInterval(fetchStatus, 3000);
@@ -83,7 +79,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 headers: { 'Authorization': `Bearer ${authToken}` }
             });
             if (resp.status === 401) {
-                logoutBtn.click();
+                logoutBtn?.click();
                 return;
             }
             const data = await resp.json();
@@ -95,9 +91,11 @@ document.addEventListener('DOMContentLoaded', () => {
             const initUsdt = data.initial_capital !== undefined ? data.initial_capital : 10;
             const realUsdt = data.real_usdt_balance;
 
+            const statBal = document.getElementById('stat-balance');
+            const balSubElem = document.getElementById('stat-balance-sub');
+
             if (isPaper) {
-                document.getElementById('stat-balance').innerText = `$${totalUsdt.toFixed(2)} USDT (Демо)`;
-                const balSubElem = document.getElementById('stat-balance-sub');
+                if (statBal) statBal.innerText = `$${totalUsdt.toFixed(2)} USDT (Демо)`;
                 if (balSubElem) {
                     let subText = `Вільні кошти: $${freeUsdt.toFixed(2)}`;
                     if (realUsdt !== null && realUsdt !== undefined) {
@@ -108,15 +106,17 @@ document.addEventListener('DOMContentLoaded', () => {
                     balSubElem.innerText = subText;
                 }
             } else {
-                document.getElementById('stat-balance').innerText = `$${totalUsdt.toFixed(2)} USDT (Live Bybit)`;
-                const balSubElem = document.getElementById('stat-balance-sub');
+                if (statBal) statBal.innerText = `$${totalUsdt.toFixed(2)} USDT (Live Bybit)`;
                 if (balSubElem) {
                     balSubElem.innerText = `Доступний залишок Bybit: $${freeUsdt.toFixed(2)} USDT`;
                 }
             }
 
-            document.getElementById('stat-symbol-price').innerText = `${data.symbol} $${data.current_price.toFixed(4)}`;
-            document.getElementById('stat-timeframe').innerText = `Таймфрейм: ${data.timeframe}`;
+            const statPrice = document.getElementById('stat-symbol-price');
+            if (statPrice) statPrice.innerText = `${data.symbol} $${data.current_price < 0.01 ? data.current_price.toFixed(8) : data.current_price.toFixed(4)}`;
+
+            const statTf = document.getElementById('stat-timeframe');
+            if (statTf) statTf.innerText = `Таймфрейм: ${data.timeframe}`;
             
             // Execution Mode Buttons Sync
             const btnExecPaper = document.getElementById('btn-exec-paper');
@@ -151,12 +151,14 @@ document.addEventListener('DOMContentLoaded', () => {
 
             const llmElem = document.getElementById('stat-llm-status');
             const providerSelect = document.getElementById('provider-select');
-            if (data.llm_enabled) {
-                llmElem.innerText = `АКТИВНИЙ (${data.llm_provider})`;
-                llmElem.className = 'stat-value text-green';
-            } else {
-                llmElem.innerText = 'ВИМКНЕНО';
-                llmElem.className = 'stat-value text-red';
+            if (llmElem) {
+                if (data.llm_enabled) {
+                    llmElem.innerText = `АКТИВНИЙ (${data.llm_provider})`;
+                    llmElem.className = 'stat-value text-green';
+                } else {
+                    llmElem.innerText = 'ВИМКНЕНО';
+                    llmElem.className = 'stat-value text-red';
+                }
             }
             if (providerSelect && data.llm_provider) {
                 providerSelect.value = data.llm_provider.toLowerCase();
@@ -168,35 +170,40 @@ document.addEventListener('DOMContentLoaded', () => {
             }
 
             // Mode badge
-            document.getElementById('mode-badge').innerText = data.mode;
+            const modeBadge = document.getElementById('mode-badge');
+            if (modeBadge) modeBadge.innerText = data.mode;
 
             // Active Position
             const posContainer = document.getElementById('active-position-container');
-            if (data.active_position) {
-                const pos = data.active_position;
-                const pnl = ((data.current_price - pos.entry_price) / pos.entry_price) * 100;
-                const pnlClass = pnl >= 0 ? 'text-green' : 'text-red';
-                posContainer.innerHTML = `
-                    <div style="font-size: 1.1rem; margin-bottom: 8px;">
-                        <strong>${data.symbol}</strong> — ${pos.amount.toFixed(4)} монет
-                    </div>
-                    <div>Ціна входу: $${pos.entry_price.toFixed(4)} | Поточна: $${data.current_price.toFixed(4)}</div>
-                    <div class="${pnlClass}" style="font-size: 1.2rem; font-weight: 700; margin-top: 8px;">
-                        PnL: ${pnl >= 0 ? '+' : ''}${pnl.toFixed(2)}%
-                    </div>
-                `;
-            } else {
-                posContainer.innerHTML = `<div class="empty-state">Немає відкритих угод (Сканування ринку...)</div>`;
+            if (posContainer) {
+                if (data.active_position) {
+                    const pos = data.active_position;
+                    const pnl = ((data.current_price - pos.entry_price) / pos.entry_price) * 100;
+                    const pnlClass = pnl >= 0 ? 'text-green' : 'text-red';
+                    posContainer.innerHTML = `
+                        <div style="font-size: 1.1rem; margin-bottom: 8px;">
+                            <strong>${data.symbol}</strong> — ${pos.amount.toFixed(4)} монет
+                        </div>
+                        <div>Ціна входу: $${pos.entry_price.toFixed(4)} | Поточна: $${data.current_price.toFixed(4)}</div>
+                        <div class="${pnlClass}" style="font-size: 1.2rem; font-weight: 700; margin-top: 8px;">
+                            PnL: ${pnl >= 0 ? '+' : ''}${pnl.toFixed(2)}%
+                        </div>
+                    `;
+                } else {
+                    posContainer.innerHTML = `<div class="empty-state">Немає відкритих угод (Сканування ринку...)</div>`;
+                }
             }
 
             // Controls state
             const toggleActiveBtn = document.getElementById('toggle-active-btn');
-            if (data.is_active) {
-                toggleActiveBtn.innerText = "▶️ Бот працює";
-                toggleActiveBtn.className = "btn btn-success";
-            } else {
-                toggleActiveBtn.innerText = "🛑 Бот на паузі";
-                toggleActiveBtn.className = "btn btn-warning";
+            if (toggleActiveBtn) {
+                if (data.is_active) {
+                    toggleActiveBtn.innerText = "▶️ Бот працює";
+                    toggleActiveBtn.className = "btn btn-success";
+                } else {
+                    toggleActiveBtn.innerText = "🛑 Бот на паузі";
+                    toggleActiveBtn.className = "btn btn-warning";
+                }
             }
 
             // Live Scan Console Stream
@@ -235,6 +242,7 @@ document.addEventListener('DOMContentLoaded', () => {
             const data = await resp.json();
 
             const tbody = document.getElementById('orders-table-body');
+            if (!tbody) return;
             const orders = Array.isArray(data) ? data : (data.order_history || []);
 
             if (orders.length === 0) {
@@ -263,9 +271,9 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     // Control Handlers
-    document.getElementById('toggle-active-btn').addEventListener('click', async () => {
+    document.getElementById('toggle-active-btn')?.addEventListener('click', async () => {
         const btn = document.getElementById('toggle-active-btn');
-        const isCurrentlyActive = btn.innerText.includes("працює");
+        const isCurrentlyActive = btn?.innerText.includes("працює");
         const action = isCurrentlyActive ? 'pause' : 'resume';
 
         await fetch('/api/control', {
@@ -276,58 +284,49 @@ document.addEventListener('DOMContentLoaded', () => {
         fetchStatus();
     });
 
-    const btnExecPaper = document.getElementById('btn-exec-paper');
-    if (btnExecPaper) {
-        btnExecPaper.addEventListener('click', async () => {
+    document.getElementById('btn-exec-paper')?.addEventListener('click', async () => {
+        await fetch('/api/control', {
+            method: 'POST',
+            headers: { 'Authorization': `Bearer ${authToken}`, 'Content-Type': 'application/json' },
+            body: JSON.stringify({ action: 'set_execution_mode', mode: 'paper' })
+        });
+        fetchStatus();
+    });
+
+    document.getElementById('btn-exec-live')?.addEventListener('click', async () => {
+        if (confirm("⚠️ УВАГА: Ви вмикаєте РЕАЛЬНУ торгівлю на Bybit! Продовжити?")) {
             await fetch('/api/control', {
                 method: 'POST',
                 headers: { 'Authorization': `Bearer ${authToken}`, 'Content-Type': 'application/json' },
-                body: JSON.stringify({ action: 'set_execution_mode', mode: 'paper' })
+                body: JSON.stringify({ action: 'set_execution_mode', mode: 'live' })
             });
             fetchStatus();
-        });
-    }
+        }
+    });
 
-    const btnExecLive = document.getElementById('btn-exec-live');
-    if (btnExecLive) {
-        btnExecLive.addEventListener('click', async () => {
-            if (confirm("⚠️ УВАГА: Ви вмикаєте РЕАЛЬНУ торгівлю на Bybit! Продовжити?")) {
-                await fetch('/api/control', {
-                    method: 'POST',
-                    headers: { 'Authorization': `Bearer ${authToken}`, 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ action: 'set_execution_mode', mode: 'live' })
-                });
-                fetchStatus();
-            }
+    document.getElementById('save-llm-key-btn')?.addEventListener('click', async () => {
+        const keyInput = document.getElementById('llm-key-input');
+        const key = keyInput ? keyInput.value.trim() : '';
+        if (!key) {
+            alert("Будь ласка, введіть API ключ!");
+            return;
+        }
+        const resp = await fetch('/api/control', {
+            method: 'POST',
+            headers: { 'Authorization': `Bearer ${authToken}`, 'Content-Type': 'application/json' },
+            body: JSON.stringify({ action: 'set_llm_key', key })
         });
-    }
+        const resData = await resp.json();
+        if (resData.success) {
+            alert("✅ API Ключ ШІ успішно збережено!");
+            if (keyInput) keyInput.value = '';
+            fetchStatus();
+        } else {
+            alert("❌ Помилка збереження ключа: " + (resData.error || "Невідома помилка"));
+        }
+    });
 
-    const saveLlmKeyBtn = document.getElementById('save-llm-key-btn');
-    if (saveLlmKeyBtn) {
-        saveLlmKeyBtn.addEventListener('click', async () => {
-            const keyInput = document.getElementById('llm-key-input');
-            const key = keyInput ? keyInput.value.trim() : '';
-            if (!key) {
-                alert("Будь ласка, введіть API ключ!");
-                return;
-            }
-            const resp = await fetch('/api/control', {
-                method: 'POST',
-                headers: { 'Authorization': `Bearer ${authToken}`, 'Content-Type': 'application/json' },
-                body: JSON.stringify({ action: 'set_llm_key', key })
-            });
-            const resData = await resp.json();
-            if (resData.success) {
-                alert("✅ API Ключ ШІ успішно збережено!");
-                keyInput.value = '';
-                fetchStatus();
-            } else {
-                alert("❌ Помилка збереження ключа: " + (resData.error || "Невідома помилка"));
-            }
-        });
-    }
-
-    document.getElementById('btn-mode-chill').addEventListener('click', async () => {
+    document.getElementById('btn-mode-chill')?.addEventListener('click', async () => {
         await fetch('/api/control', {
             method: 'POST',
             headers: { 'Authorization': `Bearer ${authToken}`, 'Content-Type': 'application/json' },
@@ -336,7 +335,7 @@ document.addEventListener('DOMContentLoaded', () => {
         fetchStatus();
     });
 
-    document.getElementById('btn-mode-hunt').addEventListener('click', async () => {
+    document.getElementById('btn-mode-hunt')?.addEventListener('click', async () => {
         await fetch('/api/control', {
             method: 'POST',
             headers: { 'Authorization': `Bearer ${authToken}`, 'Content-Type': 'application/json' },
@@ -345,7 +344,7 @@ document.addEventListener('DOMContentLoaded', () => {
         fetchStatus();
     });
 
-    document.getElementById('provider-select').addEventListener('change', async (e) => {
+    document.getElementById('provider-select')?.addEventListener('change', async (e) => {
         const provider = e.target.value;
         await fetch('/api/control', {
             method: 'POST',
@@ -355,7 +354,7 @@ document.addEventListener('DOMContentLoaded', () => {
         fetchStatus();
     });
 
-    document.getElementById('symbol-select').addEventListener('change', async (e) => {
+    document.getElementById('symbol-select')?.addEventListener('change', async (e) => {
         const symbol = e.target.value;
         await fetch('/api/control', {
             method: 'POST',
