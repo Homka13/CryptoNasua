@@ -255,10 +255,12 @@ function initApp() {
                     scanLastTime.innerText = `Останній аналіз: ${logs[0].time}`;
                 }
                 scanConsole.innerHTML = logs.map(log => {
-                    const sigColor = log.signal === 'BUY' ? '#48bb78' : (log.signal === 'SELL' ? '#f56565' : '#a0aec0');
+                    const isAiLog = log.reason && log.reason.includes('DEEPSEEK');
+                    const sigColor = log.signal === 'BUY' ? '#48bb78' : (log.signal === 'REJECTED' ? '#f56565' : (log.signal === 'SELL' ? '#f56565' : '#a0aec0'));
                     const priceFormatted = log.price < 0.01 ? log.price.toFixed(8) : log.price.toFixed(4);
+                    const bgStyle = isAiLog ? 'background: rgba(147, 51, 234, 0.15); border-left: 3px solid #a855f7; padding: 4px 8px; border-radius: 4px;' : 'border-bottom: 1px solid rgba(255,255,255,0.05); padding-bottom: 4px;';
                     return `
-                        <div style="display: flex; gap: 10px; border-bottom: 1px solid rgba(255,255,255,0.05); padding-bottom: 4px; align-items: center; flex-wrap: wrap;">
+                        <div style="display: flex; gap: 10px; margin-bottom: 4px; align-items: center; flex-wrap: wrap; ${bgStyle}">
                             <span style="color: #718096; font-size: 0.8rem;">[${log.time}]</span>
                             <span style="color: #63b3ed; font-weight: bold;">🔎 ${log.symbol} ($${priceFormatted})</span>
                             <span>| Вердикт: <strong style="color: ${sigColor};">${log.signal}</strong></span>
@@ -290,17 +292,24 @@ function initApp() {
             }
 
             tbody.innerHTML = orders.map(ord => {
-                const dateStr = new Date(ord.timestamp).toLocaleTimeString();
-                const sideClass = ord.side === 'buy' ? 'text-green' : 'text-red';
+                const dateStr = ord.time || (ord.timestamp ? new Date(ord.timestamp).toLocaleTimeString() : 'N/A');
+                const isReject = ord.status === 'REJECTED' || ord.side === 'reject';
+                const sideClass = isReject ? 'text-red' : (ord.side === 'buy' ? 'text-green' : 'text-red');
+                const badgeClass = isReject ? 'alert-danger' : 'badge-paper';
+                const statusLabel = isReject ? '🛑 REJECTED' : (ord.status || 'CLOSED');
+                const reasonText = ord.reason || '🟢 Виконано за алгоритмом';
+                const priceFormatted = ord.price ? (ord.price < 0.01 ? ord.price.toFixed(8) : ord.price.toFixed(4)) : '0.00';
+                const amountFormatted = ord.amount ? ord.amount.toFixed(4) : '-';
+
                 return `
                     <tr>
                         <td>${dateStr}</td>
-                        <td>${ord.symbol}</td>
-                        <td class="${sideClass}"><strong>${ord.side.toUpperCase()}</strong></td>
-                        <td>$${ord.price.toFixed(4)}</td>
-                        <td>${ord.amount.toFixed(4)}</td>
-                        <td><span class="badge ${ord.status === 'closed' ? 'badge-paper' : ''}">${ord.status}</span></td>
-                        <td>🟢 Виконано за алгоритмом</td>
+                        <td><strong>${ord.symbol || 'N/A'}</strong></td>
+                        <td class="${sideClass}"><strong>${(ord.side || 'BUY').toUpperCase()}</strong></td>
+                        <td>$${priceFormatted}</td>
+                        <td>${amountFormatted}</td>
+                        <td><span class="badge ${badgeClass}" style="${isReject ? 'background: rgba(239,68,68,0.2); color: #f87171;' : ''}">${statusLabel}</span></td>
+                        <td style="font-size: 0.85rem; color: ${isReject ? '#f87171' : '#a0aec0'};">${reasonText}</td>
                     </tr>
                 `;
             }).join('');

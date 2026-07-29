@@ -138,7 +138,13 @@ class DashboardServer:
             return web.json_response({'error': 'Unauthorized'}, status=401)
 
         orders = getattr(self.bot.exchange.paper, 'closed_orders', []) if (self.bot.exchange and self.bot.exchange.paper) else []
-        return web.json_response(orders)
+        verdicts = list(getattr(self.bot, 'ai_verdicts', []))
+
+        # Combine orders and AI verdicts sorted by timestamp descending
+        all_items = list(orders) + list(verdicts)
+        all_items.sort(key=lambda x: x.get('timestamp', 0), reverse=True)
+
+        return web.json_response(all_items)
 
     async def handle_post_control(self, request: web.Request) -> web.Response:
         if not self._verify_session(request):

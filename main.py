@@ -36,7 +36,8 @@ class TradingBot:
         self.risk_manager = RiskManager()
         self.current_position: Optional[Dict[str, Any]] = None
         self.latest_meta: Dict[str, Any] = {}
-        self.scan_logs = deque(maxlen=25)
+        self.scan_logs = deque(maxlen=30)
+        self.ai_verdicts = deque(maxlen=30)
         
         # Initialize LLM Analyst filter
         from llm_analyst import LLMAnalyst
@@ -176,6 +177,32 @@ class TradingBot:
                         target_sym, config.timeframe, target_meta, target_reason
                     )
 
+                    # Record AI Verdict into History Deque for Dashboard UI
+                    verdict_record = {
+                        'timestamp': int(time.time() * 1000),
+                        'time': time.strftime("%H:%M:%S"),
+                        'symbol': target_sym,
+                        'side': 'buy' if is_confirmed else 'reject',
+                        'price': target_meta.get('price', 0.0),
+                        'amount': 0.0,
+                        'status': 'CONFIRMED' if is_confirmed else 'REJECTED',
+                        'reason': llm_reason,
+                        'provider': config.llm_provider.upper()
+                    }
+                    self.ai_verdicts.appendleft(verdict_record)
+
+                    # Add prominent entry into live scan logs feed
+                    ai_icon = "🟢 DEEPSEEK CONFIRMED" if is_confirmed else "🛑 DEEPSEEK REJECTED"
+                    self.scan_logs.appendleft({
+                        'time': time.strftime("%H:%M:%S"),
+                        'symbol': target_sym,
+                        'price': target_meta.get('price', 0.0),
+                        'signal': 'BUY' if is_confirmed else 'REJECTED',
+                        'reason': f"🤖 {ai_icon}: {llm_reason}",
+                        'rsi': target_meta.get('rsi', 0.0),
+                        'trend': target_meta.get('trend', 'UNKNOWN')
+                    })
+
                     if not is_confirmed:
                         logger.warning(f"🛑 BUY signal for {target_sym} rejected by LLM Analyst: {llm_reason}")
                         await self.telegram.send_alert(f"⚠️ *BUY Signal REJECTED by LLM ({target_sym})*: {llm_reason}")
@@ -191,6 +218,7 @@ class TradingBot:
                             logger.info(f"Executing BUY for {target_sym} via Quant Engine: {risk_reason}")
                             orders = await self.exchange.execute_smart_order('buy', amount, target_meta['price'])
                             
+                            verdict_record['amount'] = amount
                             self.current_position = {
                                 'symbol': target_sym,
                                 'entry_price': target_meta['price'],
