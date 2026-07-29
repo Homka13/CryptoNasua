@@ -288,6 +288,17 @@ function initApp() {
             if (modeBadge) modeBadge.innerText = data.mode;
 
             // Active Position
+            // Update TradingView Chart based on Active Position, Selected Symbol, or Hot Scanned Symbol
+            let chartSym = 'SHIB/USDT';
+            if (data.active_position && data.active_position.symbol) {
+                chartSym = data.active_position.symbol;
+            } else if (data.symbol && data.symbol !== 'AUTO') {
+                chartSym = data.symbol;
+            } else if (data.scan_logs && data.scan_logs.length > 0 && data.scan_logs[0].symbol) {
+                chartSym = data.scan_logs[0].symbol;
+            }
+            updateTradingViewChart(chartSym);
+
             const posContainer = document.getElementById('active-position-container');
             if (posContainer) {
                 if (data.active_position) {
@@ -486,6 +497,41 @@ function initApp() {
         });
         fetchStatus();
     });
+}
+
+let tvWidgetInstance = null;
+let currentTvSymbol = '';
+
+function updateTradingViewChart(symbolStr) {
+    if (typeof TradingView === 'undefined') return;
+    
+    let cleanSym = (symbolStr || 'SHIB/USDT').replace('/', '').toUpperCase();
+    if (cleanSym.includes('AUTO')) cleanSym = 'SHIBUSDT';
+    
+    const tvSymbol = `BYBIT:${cleanSym}`;
+    if (tvSymbol === currentTvSymbol && tvWidgetInstance) return;
+
+    currentTvSymbol = tvSymbol;
+    const titleElem = document.getElementById('chart-pair-title');
+    if (titleElem) titleElem.innerText = tvSymbol;
+
+    try {
+        tvWidgetInstance = new TradingView.widget({
+            "autosize": true,
+            "symbol": tvSymbol,
+            "interval": "15",
+            "timezone": "Etc/UTC",
+            "theme": "dark",
+            "style": "1",
+            "locale": "uk",
+            "toolbar_bg": "#0f172a",
+            "enable_publishing": false,
+            "allow_symbol_change": true,
+            "container_id": "tradingview_chart_element"
+        });
+    } catch (err) {
+        console.error("TradingView widget init error:", err);
+    }
 }
 
 if (document.readyState === 'loading') {
