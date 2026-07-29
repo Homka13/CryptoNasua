@@ -124,6 +124,11 @@ document.addEventListener('DOMContentLoaded', () => {
                 providerSelect.value = data.llm_provider.toLowerCase();
             }
 
+            const symbolSelect = document.getElementById('symbol-select');
+            if (symbolSelect && data.symbol) {
+                symbolSelect.value = data.symbol;
+            }
+
             // Mode badge
             document.getElementById('mode-badge').innerText = data.mode;
 
