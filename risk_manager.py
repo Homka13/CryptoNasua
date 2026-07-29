@@ -22,14 +22,16 @@ class RiskManager:
         if usdt_free < self.min_order_usdt:
             return False, 0.0, f"Insufficient USDT balance (${usdt_free:.2f} < ${self.min_order_usdt:.2f} min)"
 
-        # Use allocated trade size or all free balance if less
-        alloc_usdt = min(self.trade_size_usdt, usdt_free)
+        # DYNAMIC COMPOUND SCALING (33% of free USDT balance, scaling up with profit)
+        compound_alloc_usdt = usdt_free * 0.33
+        alloc_usdt = max(self.trade_size_usdt, compound_alloc_usdt)
+        alloc_usdt = min(alloc_usdt, usdt_free)
 
         if alloc_usdt < self.min_order_usdt:
             return False, 0.0, f"Order size (${alloc_usdt:.2f}) below Bybit minimum (${self.min_order_usdt:.2f})"
 
         amount = alloc_usdt / current_price
-        return True, amount, f"Order size: ${alloc_usdt:.2f} ({amount:.4f} coins @ ${current_price:.2f})"
+        return True, amount, f"Dynamic Compound Order: ${alloc_usdt:.2f} (33% of ${usdt_free:.2f} USDT) | Amount: {amount:.4f} coins @ ${current_price:.2f}"
 
     def check_daily_drawdown(self, current_capital: float) -> bool:
         """Returns True if daily drawdown exceeds safe limits."""

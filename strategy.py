@@ -57,25 +57,47 @@ class HybridStrategy:
             'trend': 'BULLISH' if ema_fast_val > ema_slow_val else 'BEARISH'
         }
 
-        # 1. Check active position for Take-Profit / Stop-Loss
+        # 1. Check active position for Trailing Stop / Take-Profit / Stop-Loss
         if current_position and current_position.get('amount', 0) > 0:
             entry_price = current_position['entry_price']
             price_change = (current_price - entry_price) / entry_price
 
-            if price_change >= config.take_profit_pct:
-                return 'SELL', f'🎯 TAKE PROFIT TRIGGERED (+{price_change*100:.2f}%)', metadata
+            # --- 📈 MODULE 1: DYNAMIC TRAILING STOP-LOSS & PROFIT RUNNER ---
+            highest_price = max(current_position.get('highest_price', entry_price), current_price)
+            current_position['highest_price'] = highest_price
+            peak_gain_pct = (highest_price - entry_price) / entry_price
 
+            # If gain reached activation threshold (+2.5%), enable Dynamic Trailing Stop
+            if peak_gain_pct >= 0.025:
+                trailing_stop_price = highest_price * 0.985  # Trailing 1.5% below peak
+                if current_price <= trailing_stop_price:
+                    return 'SELL', f'🎯 DYNAMIC TRAILING STOP EXITED (Peak: +{peak_gain_pct*100:.2f}%, Closed: {price_change*100:+.2f}%)', metadata
+
+            # Hard Take-Profit backup (+15% max blowoff top)
+            if price_change >= 0.15:
+                return 'SELL', f'🚀 MAX BLOWOFF TAKE PROFIT (+{price_change*100:.2f}%)', metadata
+
+            # Hard Stop-Loss protection (-2.5%)
             if price_change <= -config.stop_loss_pct:
                 return 'SELL', f'🛑 STOP LOSS TRIGGERED ({price_change*100:.2f}%)', metadata
 
             if rsi_val >= self.rsi_overbought:
                 return 'SELL', f'⚠️ RSI OVERBOUGHT ({rsi_val:.1f} >= {self.rsi_overbought})', metadata
 
-            return 'HOLD', f'Position active (PnL: {price_change*100:+.2f}%)', metadata
+            return 'HOLD', f'Position active (PnL: {price_change*100:+.2f}%, Peak: +{peak_gain_pct*100:.2f}%)', metadata
 
         # 2. Check for Buy Entry Opportunities (No active position)
         is_bullish_trend = ema_fast_val >= ema_slow_val
         is_oversold = rsi_val <= self.rsi_oversold
+
+        # --- ⚡ MODULE 2: BREAKOUT MOMENTUM PUMP SNIPER (24h High + Volume Surge) ---
+        high_24h = float(df_calc['high'].tail(96).max()) if len(df_calc) >= 96 else float(df_calc['high'].max())
+        avg_vol_20 = float(df_calc['volume'].tail(20).mean())
+        curr_vol = float(latest['volume'])
+        vol_ratio = curr_vol / (avg_vol_20 + 1e-10)
+
+        if current_price >= (0.975 * high_24h) and vol_ratio >= 2.0 and rsi_val >= 55.0:
+            return 'BUY', f'⚡ BREAKOUT MOMENTUM PUMP SNIPER (Пробой 24h макс ${high_24h:.4f}, Об\'єм x{vol_ratio:.1f})', metadata
 
         # --- 🔥 ЛОВЕЦЬ ВІДСКОКІВ (ULTRA-DIP REVERSAL: RSI < 25) ---
         prev_candle = df_calc.iloc[-2]
