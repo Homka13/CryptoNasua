@@ -116,14 +116,14 @@
                         </select>
                     </div>
 
-                    <div class="control-row" style="flex-direction: column; align-items: flex-start; gap: 8px; margin-top: 10px; padding: 12px; background: rgba(255, 255, 255, 0.03); border-radius: 8px; border: 1px solid rgba(255, 255, 255, 0.08); width: 100%;">
-                        <div style="display: flex; justify-content: space-between; width: 100%; align-items: center; flex-wrap: wrap; gap: 6px;">
+                    <div class="llm-key-box">
+                        <div class="llm-key-header">
                             <span style="font-size: 0.85rem; color: #cbd5e0; font-weight: bold;">🔑 API Ключ ШІ (DeepSeek / OpenAI):</span>
                             <span id="llm-key-status-badge" style="font-size: 0.75rem; font-weight: bold; padding: 3px 10px; border-radius: 4px; background: rgba(72, 187, 120, 0.2); color: #48bb78; border: 1px solid rgba(72, 187, 120, 0.4);">🟢 Перевірка...</span>
                         </div>
-                        <div style="display: flex; gap: 10px; width: 100%; margin-top: 4px;">
-                            <input type="text" id="llm-key-input" placeholder="Введіть новий ключ sk-... (якщо треба змінити)" style="flex: 1; width: 100%; box-sizing: border-box; padding: 10px 14px; font-size: 0.9rem; background: #0f172a; border: 1px solid #334155; color: #f8fafc; border-radius: 6px; outline: none;" />
-                            <button id="save-llm-key-btn" class="btn btn-primary" style="padding: 10px 18px; font-size: 0.85rem; white-space: nowrap; font-weight: bold; flex-shrink: 0; min-width: 110px;">💾 Зберегти</button>
+                        <div class="llm-key-row">
+                            <input type="text" id="llm-key-input" class="llm-key-input-custom" placeholder="Введіть новий ключ sk-... (якщо треба змінити)" />
+                            <button id="save-llm-key-btn" class="btn btn-primary llm-key-btn-custom">💾 Зберегти</button>
                         </div>
                     </div>
 
@@ -179,6 +179,6 @@
         </section>
     </div>
 
-    <script src="/static/app.js?v=20260729_v13"></script>
+    <script src="/static/app.js?v=20260729_v14"></script>
 </body>
 </html>

@@ -278,3 +278,63 @@ body.dark-theme {
     color: #f87171;
     box-shadow: 0 0 10px rgba(239, 68, 68, 0.3);
 }
+
+/* Custom LLM Key Box styling */
+.llm-key-box {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    width: 100%;
+    padding: 12px;
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 12px;
+    margin-top: 10px;
+}
+
+.llm-key-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    width: 100%;
+    flex-wrap: wrap;
+    gap: 6px;
+}
+
+.llm-key-row {
+    display: flex;
+    gap: 10px;
+    width: 100%;
+    align-items: center;
+}
+
+.llm-key-input-custom {
+    flex: 1 !important;
+    width: 100% !important;
+    min-width: 180px !important;
+    height: 42px !important;
+    padding: 0 14px !important;
+    margin-bottom: 0 !important;
+    background: #0f172a !important;
+    border: 1px solid #334155 !important;
+    border-radius: 8px !important;
+    color: #f8fafc !important;
+    font-size: 0.9rem !important;
+    outline: none !important;
+}
+
+.llm-key-input-custom:focus {
+    border-color: #3b82f6 !important;
+    box-shadow: 0 0 8px rgba(59, 130, 246, 0.3) !important;
+}
+
+.llm-key-btn-custom {
+    width: auto !important;
+    height: 42px !important;
+    padding: 0 20px !important;
+    font-size: 0.85rem !important;
+    font-weight: bold !important;
+    white-space: nowrap !important;
+    border-radius: 8px !important;
+    flex-shrink: 0 !important;
+}
