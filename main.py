@@ -104,87 +104,104 @@ class TradingBot:
                     await asyncio.sleep(5)
                     continue
 
-                # 1. Fetch candles
-                df = self.exchange.fetch_ohlcv(config.symbol, config.timeframe, limit=100)
+                symbols_to_scan = ["SHIB/USDT", "SOL/USDT", "BTC/USDT", "ETH/USDT", "DOGE/USDT", "PEPE/USDT"] if config.symbol == "AUTO" else [config.symbol]
                 
-                # 2. Analyze Strategy
-                signal, reason, meta = self.strategy.analyze(df, self.current_position)
-                meta['signal'] = signal
-                meta['reason'] = reason
-                self.latest_meta = meta
+                # If holding position, scan active position's symbol
+                if self.current_position and 'symbol' in self.current_position:
+                    symbols_to_scan = [self.current_position['symbol']]
 
-                scan_entry = {
-                    'time': time.strftime("%H:%M:%S"),
-                    'symbol': config.symbol,
-                    'price': meta.get('price', 0.0),
-                    'signal': signal,
-                    'reason': reason,
-                    'rsi': meta.get('rsi', 0.0),
-                    'trend': meta.get('trend', 'UNKNOWN')
-                }
-                self.scan_logs.appendleft(scan_entry)
-                
-                logger.info(f"[{config.symbol} ${meta.get('price', 0):.4f}] Signal: {signal} | Reason: {reason}")
+                best_buy_opportunity = None
 
-                # 3. Handle Buy Signal
-                if signal == 'BUY' and self.current_position is None:
-                    # Query LLM Confirmation Filter if enabled
+                for sym in symbols_to_scan:
+                    try:
+                        df = self.exchange.fetch_ohlcv(sym, config.timeframe, limit=100)
+                        pos_for_sym = self.current_position if (self.current_position and self.current_position.get('symbol') == sym) else None
+                        signal, reason, meta = self.strategy.analyze(df, pos_for_sym)
+                        meta['signal'] = signal
+                        meta['reason'] = reason
+                        meta['symbol'] = sym
+                        self.latest_meta = meta
+
+                        scan_entry = {
+                            'time': time.strftime("%H:%M:%S"),
+                            'symbol': sym,
+                            'price': meta.get('price', 0.0),
+                            'signal': signal,
+                            'reason': reason,
+                            'rsi': meta.get('rsi', 0.0),
+                            'trend': meta.get('trend', 'UNKNOWN')
+                        }
+                        self.scan_logs.appendleft(scan_entry)
+                        logger.info(f"[{sym} ${meta.get('price', 0):.4f}] Signal: {signal} | Reason: {reason}")
+
+                        if signal == 'BUY' and self.current_position is None:
+                            if best_buy_opportunity is None or meta.get('rsi', 100) < best_buy_opportunity['meta'].get('rsi', 100):
+                                best_buy_opportunity = {'symbol': sym, 'meta': meta, 'reason': reason}
+                        elif signal == 'SELL' and self.current_position is not None:
+                            amount = self.current_position['amount']
+                            entry_p = self.current_position['entry_price']
+                            curr_p = meta['price']
+                            pnl_pct = ((curr_p - entry_p) / entry_p) * 100
+
+                            logger.info(f"Executing SELL for {sym} ({amount:.4f} coins @ ${curr_p:.2f}). Reason: {reason}")
+                            await self.exchange.execute_smart_order('sell', amount, curr_p)
+                            
+                            await self.telegram.send_alert(
+                                f"🔴 *SELL ORDER EXECUTED (Quant Engine)*\n"
+                                f"• Pair: `{sym}`\n"
+                                f"• Exit Price: `${curr_p:.2f}` (Entry: `${entry_p:.2f}`)\n"
+                                f"• PnL: `{pnl_pct:+.2f}%`\n"
+                                f"• Execution: `Limit Offset + Iceberg`\n"
+                                f"• Reason: {reason}"
+                            )
+                            self.current_position = None
+                            break
+                    except Exception as scan_err:
+                        logger.error(f"Error scanning {sym}: {scan_err}")
+
+                # Process Best Buy Opportunity found across scanned symbols
+                if best_buy_opportunity and self.current_position is None:
+                    target_sym = best_buy_opportunity['symbol']
+                    target_meta = best_buy_opportunity['meta']
+                    target_reason = best_buy_opportunity['reason']
+
                     is_confirmed, llm_reason = await self.llm_analyst.evaluate_trade_signal(
-                        config.symbol, config.timeframe, meta, reason
+                        target_sym, config.timeframe, target_meta, target_reason
                     )
 
                     if not is_confirmed:
-                        logger.warning(f"🛑 BUY signal rejected by LLM Analyst: {llm_reason}")
-                        await self.telegram.send_alert(f"⚠️ *BUY Signal REJECTED by LLM*: {llm_reason}")
+                        logger.warning(f"🛑 BUY signal for {target_sym} rejected by LLM Analyst: {llm_reason}")
+                        await self.telegram.send_alert(f"⚠️ *BUY Signal REJECTED by LLM ({target_sym})*: {llm_reason}")
                     else:
                         bal = self.exchange.fetch_balance()
                         usdt_free = bal.get('USDT', {}).get('free', 0.0)
                         
                         is_allowed, amount, risk_reason = self.risk_manager.calculate_position_size(
-                            usdt_free, meta['price']
+                            usdt_free, target_meta['price']
                         )
 
                         if is_allowed:
-                            logger.info(f"Executing BUY via Quant Engine: {risk_reason}")
-                            orders = await self.exchange.execute_smart_order('buy', amount, meta['price'])
+                            logger.info(f"Executing BUY for {target_sym} via Quant Engine: {risk_reason}")
+                            orders = await self.exchange.execute_smart_order('buy', amount, target_meta['price'])
                             
                             self.current_position = {
-                                'entry_price': meta['price'],
+                                'symbol': target_sym,
+                                'entry_price': target_meta['price'],
                                 'amount': amount,
                                 'order_id': orders[0].get('id') if orders else 'N/A'
                             }
                             
                             await self.telegram.send_alert(
                                 f"🟢 *BUY ORDER EXECUTED (Quant Engine)*\n"
-                                f"• Pair: `{config.symbol}`\n"
-                                f"• Price: `${meta['price']:.2f}`\n"
+                                f"• Pair: `{target_sym}`\n"
+                                f"• Price: `${target_meta['price']:.2f}`\n"
                                 f"• Amount: `{amount:.4f}`\n"
                                 f"• Execution: `Limit Offset + Iceberg ({config.iceberg_slices} slices)`\n"
-                                f"• Strategy Reason: {reason}\n"
+                                f"• Strategy Reason: {target_reason}\n"
                                 f"• {llm_reason}"
                             )
                         else:
-                            logger.warning(f"BUY rejected by RiskManager: {risk_reason}")
-
-                # 4. Handle Sell Signal
-                elif signal == 'SELL' and self.current_position is not None:
-                    amount = self.current_position['amount']
-                    entry_p = self.current_position['entry_price']
-                    curr_p = meta['price']
-                    pnl_pct = ((curr_p - entry_p) / entry_p) * 100
-
-                    logger.info(f"Executing SELL via Quant Engine ({amount:.4f} coins @ ${curr_p:.2f}). Reason: {reason}")
-                    await self.exchange.execute_smart_order('sell', amount, curr_p)
-                    
-                    await self.telegram.send_alert(
-                        f"🔴 *SELL ORDER EXECUTED (Quant Engine)*\n"
-                        f"• Pair: `{config.symbol}`\n"
-                        f"• Exit Price: `${curr_p:.2f}` (Entry: `${entry_p:.2f}`)\n"
-                        f"• PnL: `{pnl_pct:+.2f}%`\n"
-                        f"• Execution: `Limit Offset + Iceberg`\n"
-                        f"• Reason: {reason}"
-                    )
-                    self.current_position = None
+                            logger.warning(f"BUY rejected by RiskManager for {target_sym}: {risk_reason}")
 
             except Exception as e:
                 logger.error(f"Error in bot loop: {e}")
