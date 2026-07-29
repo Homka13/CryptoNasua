@@ -165,6 +165,8 @@ function initApp() {
 
             const llmElem = document.getElementById('stat-llm-status');
             const providerSelect = document.getElementById('provider-select');
+            const llmKeyInput = document.getElementById('llm-key-input');
+
             if (llmElem) {
                 if (data.llm_enabled) {
                     llmElem.innerText = `АКТИВНИЙ (${data.llm_provider})`;
@@ -176,6 +178,14 @@ function initApp() {
             }
             if (providerSelect && data.llm_provider) {
                 providerSelect.value = data.llm_provider.toLowerCase();
+            }
+
+            if (llmKeyInput && !llmKeyInput.value) {
+                if (data.llm_key_set && data.llm_key_masked) {
+                    llmKeyInput.placeholder = `🟢 Ключ підключено (${data.llm_key_masked})`;
+                } else {
+                    llmKeyInput.placeholder = "Введіть ваш sk-... ключ тут";
+                }
             }
 
             const symbolSelect = document.getElementById('symbol-select');
