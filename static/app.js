@@ -302,17 +302,17 @@ function initApp() {
             if (modeBadge) modeBadge.innerText = data.mode;
 
             // Active Position
-            // Update Watchlist Bar and render smooth D3.js chart for selected symbol
-            let chartSym = currentChartSymbol || 'SOL/USDT';
-            if (data.active_position && data.active_position.symbol) {
-                chartSym = data.active_position.symbol;
-            } else if (data.symbol && data.symbol !== 'AUTO') {
-                chartSym = data.symbol;
+            // Update Watchlist Bar and stable TradingView chart for selected symbol
+            if (!currentChartSymbol) {
+                if (data.active_position && data.active_position.symbol) {
+                    currentChartSymbol = data.active_position.symbol;
+                } else {
+                    currentChartSymbol = 'SOL/USDT';
+                }
             }
             
             updateWatchlistBar(data.scan_logs, data.active_position);
-            if (!currentChartSymbol) currentChartSymbol = chartSym;
-            fetchAndRenderD3Chart(currentChartSymbol);
+            updateTradingViewChart(currentChartSymbol, false);
 
             const posContainer = document.getElementById('active-position-container');
             if (posContainer) {
@@ -524,7 +524,9 @@ function initApp() {
 }
 
 let currentChartSymbol = 'SOL/USDT';
-let activeWatchlist = ['SOL/USDT', 'WLD/USDT', 'PUMP/USDT', 'BIRB/USDT', 'CHIP/USDT', 'SHIB/USDT', 'PEPE/USDT', 'BTC/USDT', 'ETH/USDT'];
+let activeWatchlist = ['SOL/USDT', 'WLD/USDT', 'PUMP/USDT', 'PEPE/USDT', 'SHIB/USDT', 'CHIP/USDT', 'BIRB/USDT', 'BTC/USDT', 'ETH/USDT'];
+let tvWidgetInstance = null;
+let currentTvSymbol = '';
 
 function updateWatchlistBar(scannedLogs, activePosition) {
     const bar = document.getElementById('watchlist-bar');
@@ -560,130 +562,48 @@ function updateWatchlistBar(scannedLogs, activePosition) {
         btn.onclick = () => {
             currentChartSymbol = sym;
             updateWatchlistBar(scannedLogs, activePosition);
-            fetchAndRenderD3Chart(sym);
+            updateTradingViewChart(sym, true);
         };
         bar.appendChild(btn);
     });
 }
 
-async function fetchAndRenderD3Chart(symbolStr) {
-    const sym = symbolStr || currentChartSymbol || 'SOL/USDT';
-    const titleElem = document.getElementById('d3-chart-active-pair');
-    if (titleElem) titleElem.innerText = `BYBIT: ${sym}`;
+function updateTradingViewChart(symbolStr, forceUpdate = false) {
+    if (typeof TradingView === 'undefined') return;
+    
+    let cleanSym = (symbolStr || 'SOL/USDT').replace('/', '').toUpperCase();
+    if (cleanSym.includes('AUTO')) cleanSym = 'SOLUSDT';
+    
+    const tvSymbol = `BYBIT:${cleanSym}`;
+    if (!forceUpdate && tvSymbol === currentTvSymbol && tvWidgetInstance) return;
+
+    currentTvSymbol = tvSymbol;
+    const titleElem = document.getElementById('chart-pair-title');
+    if (titleElem) titleElem.innerText = tvSymbol;
 
     try {
-        const resp = await fetch(`/api/klines?symbol=${encodeURIComponent(sym)}`, {
-            headers: { 'Authorization': `Bearer ${authToken}` }
+        tvWidgetInstance = new TradingView.widget({
+            "autosize": true,
+            "symbol": tvSymbol,
+            "interval": "15",
+            "timezone": "Etc/UTC",
+            "theme": "dark",
+            "style": "1",
+            "locale": "uk",
+            "toolbar_bg": "#0f172a",
+            "enable_publishing": false,
+            "allow_symbol_change": true,
+            "container_id": "tradingview_chart_element"
         });
-        const data = await resp.json();
-        if (data && data.klines && data.klines.length > 0) {
-            drawD3CandlestickSvg(data.klines, sym);
-        }
     } catch (err) {
-        console.error("D3 Chart fetch error:", err);
+        console.error("TradingView widget init error:", err);
     }
 }
 
-function drawD3CandlestickSvg(klines, symbolStr) {
-    if (typeof d3 === 'undefined') return;
-    const svg = d3.select('#d3-chart-svg');
-    svg.selectAll('*').remove();
-
-    const wrapper = document.getElementById('d3-chart-wrapper');
-    const width = wrapper ? wrapper.clientWidth : 800;
-    const height = wrapper ? wrapper.clientHeight : 440;
-
-    const margin = { top: 25, right: 75, bottom: 25, left: 15 };
-    const chartWidth = width - margin.left - margin.right;
-    const chartHeight = height - margin.top - margin.bottom;
-
-    const g = svg.append('g')
-        .attr('transform', `translate(${margin.left},${margin.top})`);
-
-    const xScale = d3.scaleBand()
-        .domain(klines.map((d, i) => i))
-        .range([0, chartWidth])
-        .padding(0.35);
-
-    const minLow = d3.min(klines, d => d.low);
-    const maxHigh = d3.max(klines, d => d.high);
-    const yPadding = (maxHigh - minLow) * 0.08;
-
-    const yScale = d3.scaleLinear()
-        .domain([minLow - yPadding, maxHigh + yPadding])
-        .range([chartHeight, 0]);
-
-    // Grid lines
-    const yAxisGrid = d3.axisRight(yScale)
-        .ticks(6)
-        .tickSize(chartWidth)
-        .tickFormat('');
-
-    g.append('g')
-        .attr('stroke', 'rgba(255,255,255,0.05)')
-        .call(yAxisGrid);
-
-    // Y Axis
-    const yAxis = d3.axisRight(yScale).ticks(6).tickFormat(d3.format(".4f"));
-    g.append('g')
-        .attr('transform', `translate(${chartWidth},0)`)
-        .attr('color', '#94a3b8')
-        .call(yAxis);
-
-    // Candlesticks
-    const candles = g.selectAll('.candle')
-        .data(klines)
-        .enter()
-        .append('g')
-        .attr('class', 'candle')
-        .attr('transform', (d, i) => `translate(${xScale(i) + xScale.bandwidth() / 2}, 0)`);
-
-    // Wick lines
-    candles.append('line')
-        .attr('y1', d => yScale(d.high))
-        .attr('y2', d => yScale(d.low))
-        .attr('stroke', d => d.close >= d.open ? '#22c55e' : '#ef4444')
-        .attr('stroke-width', 1.5);
-
-    // Candle Bodies
-    candles.append('rect')
-        .attr('x', -xScale.bandwidth() / 2)
-        .attr('y', d => yScale(Math.max(d.open, d.close)))
-        .attr('width', xScale.bandwidth())
-        .attr('height', d => Math.max(3, Math.abs(yScale(d.open) - yScale(d.close))))
-        .attr('fill', d => d.close >= d.open ? '#22c55e' : '#ef4444')
-        .attr('rx', 2);
-
-    // Current Price Line
-    if (klines.length > 0) {
-        const lastClose = klines[klines.length - 1].close;
-        const lastY = yScale(lastClose);
-
-        g.append('line')
-            .attr('x1', 0)
-            .attr('x2', chartWidth)
-            .attr('y1', lastY)
-            .attr('y2', lastY)
-            .attr('stroke', '#3b82f6')
-            .attr('stroke-dasharray', '4,4')
-            .attr('stroke-width', 1.5);
-
-        g.append('rect')
-            .attr('x', chartWidth)
-            .attr('y', lastY - 10)
-            .attr('width', 70)
-            .attr('height', 20)
-            .attr('fill', '#3b82f6')
-            .attr('rx', 4);
-
-        g.append('text')
-            .attr('x', chartWidth + 5)
-            .attr('y', lastY + 4)
-            .attr('fill', '#ffffff')
-            .attr('font-size', '10px')
-            .attr('font-weight', 'bold')
-            .text(lastClose.toFixed(4));
-    }
+if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', initApp);
+} else {
+    initApp();
 }
 
 if (document.readyState === 'loading') {

@@ -8,15 +8,13 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
-    <!-- D3.js Library for Custom Smooth Interactive Charting -->
-    <script src="https://d3js.org/d3.v7.min.js"></script>
     <!-- TradingView Widget Library -->
     <script type="text/javascript" src="https://s3.tradingview.com/tv.js"></script>
-    <!-- Google Identity Services for Google OAuth -->
+    <!-- Google Identity Services -->
     <script src="https://accounts.google.com/gsi/client" async defer></script>
 </head>
 <body class="dark-theme">
-    <!-- Authentication Screen -->
+    <!-- Authentication Screen Modal -->
     <div id="login-modal" class="modal-overlay">
         <div class="glass-card login-card">
             <div class="logo-badge">🤖 Bybit Bot Private</div>
@@ -33,9 +31,9 @@
             <!-- LOGIN FORM -->
             <div id="login-form-box" class="demo-auth-box">
                 <label>Email адреса:</label>
-                <input type="email" id="email-input" placeholder="example@gmail.com" class="input-field" style="margin-bottom: 10px;">
-                <label>Пароль (опціонально для Google Auth):</label>
-                <input type="password" id="password-input" placeholder="••••••••" class="input-field" style="margin-bottom: 15px;">
+                <input type="email" id="email-input" placeholder="yuhim1308@gmail.com" class="input-field" style="margin-bottom: 10px;">
+                <label>Пароль:</label>
+                <input type="password" id="password-input" placeholder="admin" class="input-field" style="margin-bottom: 15px;">
                 <button id="login-btn" class="btn btn-primary" style="width: 100%;">Увійти</button>
             </div>
 
@@ -63,7 +61,7 @@
             </div>
             
             <div class="user-profile">
-                <span id="user-email-display" class="user-email">user@gmail.com</span>
+                <span id="user-email-display" class="user-email">yuhim1308@gmail.com</span>
                 <button id="logout-btn" class="btn btn-sm btn-outline">Вийти</button>
             </div>
         </header>
@@ -137,7 +135,10 @@
                             <option value="deepseek">🤖 DeepSeek V4 Pro / V3</option>
                             <option value="gemini">💎 Google Gemini 1.5</option>
                             <option value="openai">🧠 OpenAI GPT-4o-mini</option>
-                            <div class="control-row">
+                        </select>
+                    </div>
+
+                    <div class="control-row">
                         <span>Захист від сну (24/7 Windows Keep-Alive):</span>
                         <button id="toggle-sleep-btn" class="btn btn-sm btn-outline">💤 24/7 АКТИВНИЙ</button>
                     </div>
@@ -167,14 +168,14 @@
             </div>
         </section>
 
-        <!-- Custom D3.js Interactive Multi-Coin Watchlist Chart Section -->
+        <!-- Stable Exchange Chart Section (Watchlist Tabs + Stable TradingView) -->
         <section class="glass-card section-card" style="margin-bottom: 24px; padding: 20px;">
             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; flex-wrap: wrap; gap: 12px;">
                 <h3 style="margin: 0; display: flex; align-items: center; gap: 8px;">
-                    📈 Інтерактивний D3.js Графік Монет <span style="color: #63b3ed; font-size: 0.8rem; font-weight: bold;">(Без Стрибків | Realtime Bybit Spot)</span>
+                    📊 Інтерактивний Графік Біржі <span style="color: #63b3ed; font-size: 0.8rem; font-weight: bold;">(TradingView Bybit Spot | Стабільний без дрижань)</span>
                 </h3>
                 <div style="display: flex; gap: 8px; align-items: center;">
-                    <span id="d3-chart-active-pair" style="color: #48bb78; font-weight: bold; font-family: monospace; font-size: 1.05rem;">BYBIT: SOL/USDT</span>
+                    <span id="chart-pair-title" style="color: #48bb78; font-weight: bold; font-family: monospace; font-size: 1.05rem;">BYBIT: SOLUSDT</span>
                     <span class="pulse-dot green"></span>
                 </div>
             </div>
@@ -184,46 +185,45 @@
                 <!-- Watchlist coin pills dynamically populated by app.js -->
             </div>
 
-            <!-- D3.js Canvas / SVG Container -->
-            <div id="d3-chart-wrapper" style="width: 100%; height: 440px; background: rgba(15, 23, 42, 0.7); border: 1px solid rgba(255,255,255,0.1); border-radius: 12px; position: relative; overflow: hidden;">
-                <svg id="d3-chart-svg" style="width: 100%; height: 100%; display: block;"></svg>
-                <div id="d3-tooltip" class="d3-tooltip-box hidden"></div>
+            <!-- TradingView Widget Frame Container -->
+            <div class="tradingview-widget-container" style="height: 500px; width: 100%; border-radius: 12px; overflow: hidden; border: 1px solid rgba(255,255,255,0.08);">
+                <div id="tradingview_chart_element" style="height: 500px; width: 100%;"></div>
             </div>
         </section>
 
         <!-- DUAL PARALLEL FIXED-HEIGHT PANELS GRID -->
-        <section class="dual-panel-grid" style="display: grid; grid-template-columns: 1fr 1fr; gap: 24px; margin-bottom: 24px;">
+        <section class="dual-panel-grid">
             <!-- Panel 1: Live Screener Stream -->
-            <div class="glass-card panel-card-fixed" style="height: 520px; display: flex; flex-direction: column;">
-                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; padding-bottom: 8px; border-bottom: 1px solid rgba(255,255,255,0.08);">
+            <div class="glass-card panel-card-fixed">
+                <div class="panel-header">
                     <h3 style="margin: 0; font-size: 1.05rem; display: flex; align-items: center; gap: 8px;">
                         📡 Сканування Ринку <span style="color: #48bb78; font-size: 0.8rem; font-weight: bold; animation: pulse 1.5s infinite;">● LIVE</span>
                     </h3>
                     <span id="scan-last-time" style="font-size: 0.75rem; color: #a0aec0;">Оновлення...</span>
                 </div>
-                <div id="scan-log-console" style="flex: 1; background: rgba(15, 23, 42, 0.7); border: 1px solid rgba(255, 255, 255, 0.1); border-radius: 8px; padding: 12px; font-family: 'Courier New', Courier, monospace; font-size: 0.82rem; overflow-y: auto; display: flex; flex-direction: column; gap: 8px;">
+                <div id="scan-log-console">
                     <div style="color: #718096;">Очікування перших результатів сканування...</div>
                 </div>
             </div>
 
             <!-- Panel 2: Orders & LLM Review History Table -->
-            <div class="glass-card panel-card-fixed" style="height: 520px; display: flex; flex-direction: column;">
-                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; padding-bottom: 8px; border-bottom: 1px solid rgba(255,255,255,0.08);">
+            <div class="glass-card panel-card-fixed">
+                <div class="panel-header">
                     <h3 style="margin: 0; font-size: 1.05rem; display: flex; align-items: center; gap: 8px;">
                         📜 Історія Угод та ШІ Вердикти
                     </h3>
                     <span id="history-count-badge" class="badge" style="font-size: 0.75rem;">0 записів</span>
                 </div>
-                <div class="table-wrapper-scrollable" style="flex: 1; overflow-y: auto; border: 1px solid rgba(255, 255, 255, 0.1); border-radius: 8px; background: rgba(15, 23, 42, 0.7);">
-                    <table class="data-table" style="width: 100%;">
-                        <thead style="position: sticky; top: 0; background: #0f172a; z-index: 10;">
+                <div class="table-wrapper-scrollable">
+                    <table class="data-table">
+                        <thead>
                             <tr>
-                                <th style="padding: 10px;">Час</th>
-                                <th style="padding: 10px;">Пара</th>
-                                <th style="padding: 10px;">Тип</th>
-                                <th style="padding: 10px;">Ціна</th>
-                                <th style="padding: 10px;">Статус</th>
-                                <th style="padding: 10px;">ШІ Причина</th>
+                                <th>Час</th>
+                                <th>Пара</th>
+                                <th>Тип</th>
+                                <th>Ціна</th>
+                                <th>Статус</th>
+                                <th>ШІ Причина</th>
                             </tr>
                         </thead>
                         <tbody id="orders-table-body">
@@ -237,6 +237,6 @@
         </section>
     </div>
 
-    <script src="/static/app.js?v=20260729_v22"></script>
+    <script src="/static/app.js?v=20260729_v26"></script>
 </body>
 </html>
