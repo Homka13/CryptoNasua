@@ -34,7 +34,7 @@ class TradingBot:
         self.exchange = ExchangeService()
         self.strategy = HybridStrategy()
         self.risk_manager = RiskManager()
-        self.current_position: Optional[Dict[str, Any]] = None
+        self.current_position: Optional[Dict[str, Any]] = self._load_position()
         self.latest_meta: Dict[str, Any] = {}
         self.rejected_cooldowns: Dict[str, float] = {}  # Symbol -> expiry timestamp
         self.scan_logs = deque(maxlen=30)
@@ -49,6 +49,29 @@ class TradingBot:
             get_status_fn=self.get_bot_status_str,
             get_balance_fn=self.get_balance_str
         )
+
+    def _load_position(self) -> Optional[Dict[str, Any]]:
+        pos_file = os.path.join(os.path.dirname(__file__), "data", "position.json")
+        if os.path.exists(pos_file):
+            try:
+                with open(pos_file, 'r', encoding='utf-8') as f:
+                    pos = json.load(f)
+                    if pos and isinstance(pos, dict) and pos.get('amount', 0) > 0:
+                        logger.info(f"📌 Loaded active open position from position.json: {pos.get('symbol')}")
+                        return pos
+            except Exception as e:
+                logger.error(f"Error loading position.json: {e}")
+        return None
+
+    def _save_position(self, pos: Optional[Dict[str, Any]]) -> None:
+        pos_dir = os.path.join(os.path.dirname(__file__), "data")
+        os.makedirs(pos_dir, exist_ok=True)
+        pos_file = os.path.join(pos_dir, "position.json")
+        try:
+            with open(pos_file, 'w', encoding='utf-8') as f:
+                json.dump(pos or {}, f, indent=2)
+        except Exception as e:
+            logger.error(f"Error saving position.json: {e}")
 
     def get_bot_status_str(self) -> str:
         meta = self.latest_meta
@@ -174,6 +197,7 @@ class TradingBot:
                                 f"• Reason: {reason}"
                             )
                             self.current_position = None
+                            self._save_position(None)
                             break
                     except Exception as scan_err:
                         logger.error(f"Error scanning {sym}: {scan_err}")
@@ -238,6 +262,7 @@ class TradingBot:
                                 'amount': amount,
                                 'order_id': orders[0].get('id') if orders else 'N/A'
                             }
+                            self._save_position(self.current_position)
                             
                             await self.telegram.send_alert(
                                 f"🟢 *BUY ORDER EXECUTED (Quant Engine)*\n"
@@ -249,6 +274,8 @@ class TradingBot:
                                 f"• {llm_reason}"
                             )
                         else:
+                            verdict_record['status'] = 'RISK_REJECTED'
+                            verdict_record['reason'] += f" | ⚠️ RiskManager: {risk_reason}"
                             logger.warning(f"BUY rejected by RiskManager for {target_sym}: {risk_reason}")
 
             except Exception as e:
