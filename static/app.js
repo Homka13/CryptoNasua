@@ -198,6 +198,29 @@ document.addEventListener('DOMContentLoaded', () => {
                 toggleActiveBtn.innerText = "🛑 Бот на паузі";
                 toggleActiveBtn.className = "btn btn-warning";
             }
+
+            // Live Scan Console Stream
+            const scanConsole = document.getElementById('scan-log-console');
+            const scanLastTime = document.getElementById('scan-last-time');
+            const logs = data.scan_logs || [];
+            
+            if (scanConsole && logs.length > 0) {
+                if (scanLastTime) {
+                    scanLastTime.innerText = `Останній аналіз: ${logs[0].time}`;
+                }
+                scanConsole.innerHTML = logs.map(log => {
+                    const sigColor = log.signal === 'BUY' ? '#48bb78' : (log.signal === 'SELL' ? '#f56565' : '#a0aec0');
+                    const priceFormatted = log.price < 0.01 ? log.price.toFixed(8) : log.price.toFixed(4);
+                    return `
+                        <div style="display: flex; gap: 10px; border-bottom: 1px solid rgba(255,255,255,0.05); padding-bottom: 4px; align-items: center; flex-wrap: wrap;">
+                            <span style="color: #718096; font-size: 0.8rem;">[${log.time}]</span>
+                            <span style="color: #63b3ed; font-weight: bold;">🔎 ${log.symbol} ($${priceFormatted})</span>
+                            <span>| Вердикт: <strong style="color: ${sigColor};">${log.signal}</strong></span>
+                            <span style="color: #cbd5e0; flex: 1;">| ${log.reason}</span>
+                        </div>
+                    `;
+                }).join('');
+            }
         } catch (err) {
             console.error("Status polling error:", err);
         }

@@ -24,6 +24,9 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+from collections import deque
+import time
+
 class TradingBot:
     """Main Orchestrator for the Bybit Crypto Trading Bot ($10 starting budget)."""
 
@@ -33,6 +36,7 @@ class TradingBot:
         self.risk_manager = RiskManager()
         self.current_position: Optional[Dict[str, Any]] = None
         self.latest_meta: Dict[str, Any] = {}
+        self.scan_logs = deque(maxlen=25)
         
         # Initialize LLM Analyst filter
         from llm_analyst import LLMAnalyst
@@ -105,9 +109,22 @@ class TradingBot:
                 
                 # 2. Analyze Strategy
                 signal, reason, meta = self.strategy.analyze(df, self.current_position)
+                meta['signal'] = signal
+                meta['reason'] = reason
                 self.latest_meta = meta
+
+                scan_entry = {
+                    'time': time.strftime("%H:%M:%S"),
+                    'symbol': config.symbol,
+                    'price': meta.get('price', 0.0),
+                    'signal': signal,
+                    'reason': reason,
+                    'rsi': meta.get('rsi', 0.0),
+                    'trend': meta.get('trend', 'UNKNOWN')
+                }
+                self.scan_logs.appendleft(scan_entry)
                 
-                logger.info(f"[{config.symbol} ${meta.get('price', 0):.2f}] Signal: {signal} | Reason: {reason}")
+                logger.info(f"[{config.symbol} ${meta.get('price', 0):.4f}] Signal: {signal} | Reason: {reason}")
 
                 # 3. Handle Buy Signal
                 if signal == 'BUY' and self.current_position is None:

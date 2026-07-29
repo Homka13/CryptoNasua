@@ -130,7 +130,8 @@ class DashboardServer:
             'trading_mode': config.trading_mode,
             'trading_mode_display': config.trading_mode_display,
             'min_llm_confidence': config.min_llm_confidence,
-            'active_position': self.bot.current_position
+            'active_position': self.bot.current_position,
+            'scan_logs': list(getattr(self.bot, 'scan_logs', []))
         }
         return web.json_response(payload)
 
