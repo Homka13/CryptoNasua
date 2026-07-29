@@ -43,25 +43,22 @@ class DashboardServer:
         try:
             body = await request.json()
             email = body.get('email', '').strip().lower()
+
+            import re
+            email_regex = r"^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$"
+            if not re.match(email_regex, email):
+                return web.json_response({
+                    'success': False,
+                    'error': "Некоректний формат email адреси. Будь ласка, введіть дійсний Email."
+                }, status=400)
             
             allowed_email = config.allowed_google_email.strip().lower()
 
-            if not allowed_email:
-                # If no whitelist specified in env, allow login in dev mode & notify user
-                session_token = f"session_{email}"
-                self.authenticated_sessions.add(session_token)
-                return web.json_response({
-                    'success': True,
-                    'token': session_token,
-                    'email': email,
-                    'message': 'Logged in (No whitelist enforced in .env)'
-                })
-
-            if email != allowed_email:
+            if allowed_email and email != allowed_email:
                 logger.warning(f"🚨 BLOCKED UNAUTHORIZED GOOGLE LOGIN ATTEMPT: {email}")
                 return web.json_response({
                     'success': False,
-                    'error': f"Access Denied: Email '{email}' is not whitelisted."
+                    'error': f"Доступ заборонено: Email '{email}' відсутній у списку дозволених."
                 }, status=403)
 
             session_token = f"session_{email}"
