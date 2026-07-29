@@ -131,6 +131,10 @@ class ExchangeService:
             exchange_params['urls'] = {'api': ccxt.bybit().urls['test']}
             
         self.exchange = ccxt.bybit(exchange_params)
+        try:
+            self.exchange.load_markets()
+        except Exception:
+            pass
         self.paper = PaperExchange(config.initial_capital) if self.is_paper else None
         
         logger.info(f"Exchange initialized. Mode: {'PAPER TRADING' if self.is_paper else 'LIVE BYBIT SPOT'}")
@@ -327,7 +331,7 @@ class ExchangeService:
         return executed_orders
 
     def create_spot_order(self, side: str, amount: float, price: Optional[float] = None, order_type: str = 'market', symbol: str = config.symbol) -> Dict[str, Any]:
-        """Creates a buy or sell order (live or paper)."""
+        """Creates a buy or sell order (live or paper) with dynamic min_cost compliance."""
         if price is None:
             ticker = self.fetch_ticker(symbol)
             price = ticker['last']
@@ -336,6 +340,15 @@ class ExchangeService:
             return self.paper.create_order(symbol, order_type, side, amount, price)
         
         try:
+            # Auto-adjust order amount to clear Bybit's minimum notional cost limit (retCode 170140 protection)
+            if hasattr(self.exchange, 'markets') and symbol in self.exchange.markets:
+                market = self.exchange.markets[symbol]
+                min_cost = market.get('limits', {}).get('cost', {}).get('min', None)
+                if min_cost and (amount * price) < float(min_cost):
+                    adjusted_cost = float(min_cost) * 1.05
+                    amount = adjusted_cost / price
+                    logger.info(f"⚙️ Auto-adjusted {symbol} order size to ${adjusted_cost:.2f} USDT to comply with Bybit min order limit (${min_cost})")
+
             if order_type == 'market':
                 return self.exchange.create_market_order(symbol, side, amount)
             else:
