@@ -46,6 +46,7 @@ class TradingConfig:
     use_dynamic_market_screener: bool = os.getenv("USE_DYNAMIC_SCREENER", "true").lower() == "true"
     min_screener_volume_usdt: float = 5000000.0  # Min 5 Million USDT 24h volume
     screener_top_limit: int = 12                 # Select Top 12 most volatile high-volume pairs
+    rejected_cooldown_minutes: int = 15          # Cooldown period for coins rejected by LLM to prevent log spam
     trading_pairs: list = field(default_factory=lambda: [
         "WIF/USDT", "PEPE/USDT", "BONK/USDT", "FLOKI/USDT", 
         "SUI/USDT", "NEAR/USDT", "FET/USDT", "SOL/USDT", "DOGE/USDT"

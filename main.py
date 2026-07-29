@@ -36,6 +36,7 @@ class TradingBot:
         self.risk_manager = RiskManager()
         self.current_position: Optional[Dict[str, Any]] = None
         self.latest_meta: Dict[str, Any] = {}
+        self.rejected_cooldowns: Dict[str, float] = {}  # Symbol -> expiry timestamp
         self.scan_logs = deque(maxlen=30)
         self.ai_verdicts = deque(maxlen=30)
         
@@ -64,8 +65,7 @@ class TradingBot:
 
         return (
             f"📊 *BYBIT BOT STATUS*\n"
-            f"• Execution: `{'PAPER TRADING' if config.paper_trading else 'LIVE'}`\n"
-            f"• Style Mode: `{config.trading_mode_display}`\n"
+            f"• Mode: `{'PAPER TRADING' if config.paper_trading else 'LIVE'}`\n"
             f"• Symbol: `{config.symbol}` ({config.timeframe})\n"
             f"• Last Price: `${price:.2f}`\n"
             f"• RSI (14): `{rsi:.1f}`\n"
@@ -92,19 +92,20 @@ class TradingBot:
         logger.info("🚀 Starting Bybit Trading Bot loop...")
         await self.telegram.send_alert(
             f"🚀 *Trading Bot Started!*\n"
-            f"Execution: `{'PAPER TRADING' if config.paper_trading else 'LIVE'}`\n"
-            f"Style Mode: `{config.trading_mode_display}`\n"
+            f"Mode: `{'PAPER TRADING' if config.paper_trading else 'LIVE'}`\n"
             f"Capital: `${config.initial_capital:.2f}`\n"
             f"Pair: `{config.symbol}` ({config.timeframe})\n"
             f"LLM Filter: `{'ENABLED' if config.use_llm_confirmation else 'DISABLED'}`"
         )
 
+        import time
         while True:
             try:
                 if not self.telegram.is_active:
                     await asyncio.sleep(5)
                     continue
 
+                # Determine pairs to scan
                 if self.current_position and 'symbol' in self.current_position:
                     symbols_to_scan = [self.current_position['symbol']]
                 elif config.symbol == "AUTO" or getattr(config, 'use_dynamic_market_screener', False):
@@ -118,9 +119,19 @@ class TradingBot:
                 else:
                     symbols_to_scan = [config.symbol]
 
+                # Filter out symbols currently in Cooldown after LLM rejection
+                now = time.time()
+                active_scan_symbols = [
+                    s for s in symbols_to_scan 
+                    if now >= self.rejected_cooldowns.get(s, 0)
+                ]
+
                 best_buy_opportunity = None
 
-                for sym in symbols_to_scan:
+                for sym in active_scan_symbols:
+                    if not self.telegram.is_active:
+                        break
+
                     try:
                         df = self.exchange.fetch_ohlcv(sym, config.timeframe, limit=100)
                         pos_for_sym = self.current_position if (self.current_position and self.current_position.get('symbol') == sym) else None
@@ -204,8 +215,10 @@ class TradingBot:
                     })
 
                     if not is_confirmed:
-                        logger.warning(f"🛑 BUY signal for {target_sym} rejected by LLM Analyst: {llm_reason}")
-                        await self.telegram.send_alert(f"⚠️ *BUY Signal REJECTED by LLM ({target_sym})*: {llm_reason}")
+                        # Activate 15-minute cooldown for rejected pair to prevent spam and focus on other pairs
+                        self.rejected_cooldowns[target_sym] = time.time() + (15 * 60)
+                        logger.warning(f"🛑 BUY signal for {target_sym} rejected by LLM Analyst (15m Cooldown activated): {llm_reason}")
+                        await self.telegram.send_alert(f"⚠️ *BUY Signal REJECTED by LLM ({target_sym})* [15m Cooldown Activated]: {llm_reason}")
                     else:
                         bal = self.exchange.fetch_balance()
                         usdt_free = bal.get('USDT', {}).get('free', 0.0)
