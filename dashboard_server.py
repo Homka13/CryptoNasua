@@ -89,8 +89,16 @@ class DashboardServer:
             return web.json_response({'error': 'Unauthorized'}, status=401)
 
         meta = self.bot.latest_meta
-        bal = self.bot.exchange.fetch_balance()
-        usdt_free = bal.get('USDT', {}).get('free', 0.0)
+        try:
+            bal = self.bot.exchange.fetch_balance()
+            usdt_free = bal.get('USDT', {}).get('free', 0.0)
+            usdt_total = bal.get('USDT', {}).get('total', usdt_free)
+            usdt_used = bal.get('USDT', {}).get('used', 0.0)
+        except Exception as e:
+            logger.error(f"Error fetching balance for dashboard: {e}")
+            usdt_free = 0.0
+            usdt_total = 0.0
+            usdt_used = 0.0
 
         payload = {
             'symbol': config.symbol,
@@ -103,6 +111,9 @@ class DashboardServer:
             'ema_slow': meta.get('ema_slow', 0.0),
             'trend': meta.get('trend', 'UNKNOWN'),
             'usdt_balance': usdt_free,
+            'usdt_total': usdt_total,
+            'usdt_used': usdt_used,
+            'initial_capital': config.initial_capital,
             'llm_enabled': config.use_llm_confirmation,
             'llm_provider': config.llm_provider.upper(),
             'trading_mode': config.trading_mode,

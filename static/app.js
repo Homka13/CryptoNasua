@@ -89,7 +89,16 @@ document.addEventListener('DOMContentLoaded', () => {
             const data = await resp.json();
 
             // Update UI Stats
-            document.getElementById('stat-balance').innerText = `$${data.usdt_balance.toFixed(2)} USDT`;
+            const totalUsdt = data.usdt_total !== undefined ? data.usdt_total : data.usdt_balance;
+            const freeUsdt = data.usdt_balance !== undefined ? data.usdt_balance : 0;
+            const initUsdt = data.initial_capital !== undefined ? data.initial_capital : 10;
+            
+            document.getElementById('stat-balance').innerText = `$${totalUsdt.toFixed(2)} USDT`;
+            const balSubElem = document.getElementById('stat-balance-sub');
+            if (balSubElem) {
+                balSubElem.innerText = `Вільні кошти: $${freeUsdt.toFixed(2)} | Початкові: $${initUsdt.toFixed(2)}`;
+            }
+
             document.getElementById('stat-symbol-price').innerText = `${data.symbol} $${data.current_price.toFixed(4)}`;
             document.getElementById('stat-timeframe').innerText = `Таймфрейм: ${data.timeframe}`;
             
