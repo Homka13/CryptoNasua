@@ -165,7 +165,7 @@ class DashboardServer:
 
         active_ex = getattr(config, 'active_exchange', getattr(config, 'exchange_name', 'bybit')).upper()
         payload = {
-            'symbol': config.symbol,
+            'symbol': meta.get('symbol', config.symbol),
             'timeframe': config.timeframe,
             'active_exchange': active_ex,
             'mode': 'PAPER TRADING' if config.paper_trading else f'LIVE {active_ex}',
@@ -253,7 +253,9 @@ class DashboardServer:
                 return web.json_response({'success': True, 'prevent_sleep': config.prevent_sleep})
             elif action == 'toggle_mode':
                 config.paper_trading = not config.paper_trading
-                self.bot.exchange.is_paper = config.paper_trading
+                from exchanges.exchange_factory import ExchangeFactory
+                self.bot.exchange = ExchangeFactory.create_adapter()
+                logger.info(f"🌐 Execution Mode Toggled via Dashboard: {'PAPER TRADING ($10)' if config.paper_trading else 'LIVE CEX REAL'}")
                 return web.json_response({'success': True, 'paper_trading': config.paper_trading})
             elif action == 'close_position':
                 if self.bot.current_position:
@@ -275,8 +277,9 @@ class DashboardServer:
             elif action == 'set_execution_mode':
                 mode = body.get('mode', 'paper')
                 config.paper_trading = (mode.lower() == 'paper')
-                self.bot.exchange.is_paper = config.paper_trading
-                logger.info(f"🌐 Execution Mode Switched via Dashboard: {'PAPER TRADING' if config.paper_trading else 'LIVE BYBIT SPOT'}")
+                from exchanges.exchange_factory import ExchangeFactory
+                self.bot.exchange = ExchangeFactory.create_adapter()
+                logger.info(f"🌐 Execution Mode Switched via Dashboard: {'PAPER TRADING' if config.paper_trading else 'LIVE CEX REAL'}")
                 return web.json_response({'success': True, 'paper_trading': config.paper_trading})
             elif action == 'set_llm_key':
                 key = body.get('key', '').strip()

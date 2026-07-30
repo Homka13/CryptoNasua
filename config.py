@@ -16,7 +16,7 @@ class TradingConfig:
     binance_testnet: bool = os.getenv("BINANCE_TESTNET", "false").lower() == "true"
     bybit_private_key_path: str = os.getenv("BYBIT_API_PRIVATE_KEY_PATH", "")
     testnet: bool = os.getenv("TESTNET", "false").lower() == "true"
-    paper_trading: bool = os.getenv("PAPER_TRADING", "true").lower() == "true"
+    paper_trading: bool = os.getenv("PAPER_TRADING", "false").lower() == "true"
 
     # Telegram Security
     telegram_bot_token: str = os.getenv("TELEGRAM_BOT_TOKEN", "")
