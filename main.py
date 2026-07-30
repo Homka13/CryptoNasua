@@ -860,12 +860,16 @@ class TradingBot:
                                 await self.telegram.send_alert(f"⚠️ *LIVE Mode Error*: Потрібно вказати API ключі у файлі `.env`!")
                             await asyncio.sleep(0.5)
 
-                    # Size against the whole free balance. The RiskManager's 45% rule already
-                    # leaves room for further entries, and it shrinks naturally as the balance
-                    # drops with each fill — pre-dividing by the free slot count starved orders
-                    # below the exchange minimum on a small account.
+                    # Dynamically query CEX min_notional limit for target symbol (e.g. $1.00 - $5.00 on Bybit)
+                    symbol_min_notional = 1.0
+                    try:
+                        if hasattr(self.exchange, 'get_min_notional'):
+                            symbol_min_notional = self.exchange.get_min_notional(target_sym)
+                    except Exception:
+                        pass
+
                     is_allowed, amount, risk_reason = self.risk_manager.calculate_position_size(
-                        usdt_free, target_meta['price']
+                        usdt_free, target_meta['price'], min_notional=symbol_min_notional
                     )
 
                     if is_allowed:

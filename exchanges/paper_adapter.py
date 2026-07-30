@@ -20,6 +20,18 @@ class PaperExchangeAdapter(BaseExchangeAdapter):
         self.closed_orders: List[Dict[str, Any]] = []
         self.order_id_counter = 1000
 
+    def get_min_notional(self, symbol: str) -> float:
+        """Dynamically fetches exact minimum order notional value (in USDT) for symbol."""
+        try:
+            if hasattr(self.public_exchange, 'market'):
+                market = self.public_exchange.market(symbol)
+                min_cost = market.get('limits', {}).get('cost', {}).get('min')
+                if min_cost is not None and float(min_cost) > 0:
+                    return float(min_cost)
+        except Exception:
+            pass
+        return 1.0  # Default minimum order for paper trading
+
     def fetch_ohlcv(self, symbol: str, timeframe: str = '15m', limit: int = 100) -> pd.DataFrame:
         target = symbol if symbol and symbol != "AUTO" else "SHIB/USDT"
         ohlcv = self.public_exchange.fetch_ohlcv(target, timeframe=timeframe, limit=limit)

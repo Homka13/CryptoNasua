@@ -14,26 +14,36 @@ class RiskManager:
         self.max_daily_drawdown = config.max_daily_drawdown
         self.iceberg_slices = config.iceberg_slices
 
-    def calculate_position_size(self, usdt_balance: float, current_price: float) -> Tuple[bool, float, str]:
+    def calculate_position_size(self, usdt_balance: float, current_price: float, min_notional: float = 1.0) -> Tuple[bool, float, str]:
         """
         Decides whether a trade is allowed and how much of the coin to buy.
-        Allocates 45% of the available balance, but never below the exchange's
-        minimum notional — an order under that is guaranteed to be rejected.
+        Dynamically adapts to the exchange's min_notional for the specific symbol.
         Returns: (is_allowed, amount_in_coin, risk_status_reason)
         """
         if usdt_balance <= 0 or current_price <= 0:
             return False, 0.0, "Invalid balance or price"
 
-        min_order = getattr(config, 'min_order_usdt', 5.5)
+        # Effective minimum notional: use symbol's dynamic CEX limit (default $1.00)
+        effective_min = max(min_notional, 1.0)
 
-        trade_allocation_usdt = usdt_balance * self.max_trade_pct
-        if trade_allocation_usdt < min_order:
-            # Concentrate into one position rather than place a doomed sub-minimum order.
-            trade_allocation_usdt = min_order
-
-        if trade_allocation_usdt > usdt_balance:
+        if usdt_balance < effective_min:
             return False, 0.0, (
-                f"Insufficient balance: need ${trade_allocation_usdt:.2f} "
+                f"Insufficient balance: need ${effective_min:.2f} "
+                f"(exchange minimum), have ${usdt_balance:.2f}"
+            )
+
+        # Allocate configured trade pct (e.g. 45-50%), but scale up if below effective_min
+        trade_allocation_usdt = usdt_balance * self.max_trade_pct
+        if trade_allocation_usdt < effective_min:
+            trade_allocation_usdt = min(usdt_balance * 0.995, usdt_balance)
+
+        # Ensure trade allocation stays strictly within free available balance
+        if trade_allocation_usdt > usdt_balance:
+            trade_allocation_usdt = usdt_balance * 0.995
+
+        if trade_allocation_usdt < effective_min:
+            return False, 0.0, (
+                f"Insufficient balance: need ${effective_min:.2f} "
                 f"(exchange minimum), have ${usdt_balance:.2f}"
             )
 

@@ -70,6 +70,19 @@ class BybitExchangeAdapter(BaseExchangeAdapter):
         except Exception as e:
             logger.warning(f"Failed to pre-load Bybit markets: {e}")
 
+    def get_min_notional(self, symbol: str) -> float:
+        """Dynamically fetches exact minimum order notional value (in USDT) for symbol from Bybit."""
+        try:
+            if not self.exchange.markets:
+                self.exchange.load_markets()
+            market = self.exchange.market(symbol)
+            min_cost = market.get('limits', {}).get('cost', {}).get('min')
+            if min_cost is not None and float(min_cost) > 0:
+                return float(min_cost)
+        except Exception as e:
+            logger.debug(f"Could not fetch dynamic min_notional for {symbol}: {e}")
+        return 1.0  # Fallback CEX min on Bybit Spot
+
     def fetch_ohlcv(self, symbol: str, timeframe: str = '15m', limit: int = 100) -> pd.DataFrame:
         target = symbol if symbol and symbol != "AUTO" else "SHIB/USDT"
         ohlcv = self.exchange.fetch_ohlcv(target, timeframe=timeframe, limit=limit)
