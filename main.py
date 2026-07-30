@@ -740,11 +740,17 @@ class TradingBot:
                     stagnant_sym = None
 
                     if self.active_positions:
-                        # Find truly stagnant/losing position for auto-swap (minimum 8-minute hold time & significant RSI delta)
+                        # Find truly stagnant/losing position for auto-swap (minimum 10-minute hold time & significant RSI delta)
                         for pos in self.active_positions:
                             stagnant_sym = pos.get('symbol')
                             if stagnant_sym == best_buy_opportunity['symbol']:
                                 continue
+
+                            # 🛡️ BLUE CHIP PRIORITY SHIELD: FORBIDDEN to auto-swap out of BTC/ETH/SOL/BNB into altcoins!
+                            is_blue_chip = any(bp in stagnant_sym for bp in ["BTC", "ETH", "SOL", "BNB"]) or (stagnant_sym in getattr(config, 'stable_pairs', []))
+                            if is_blue_chip:
+                                continue
+
                             entry_p = pos.get('entry_price', 1.0)
                             entry_t = pos.get('entry_time', now)
                             pos_age_min = (now - entry_t) / 60.0
@@ -754,7 +760,7 @@ class TradingBot:
                             target_rsi = float(best_buy_opportunity['meta'].get('rsi', 50) or 50)
                             pnl_pct = ((curr_p - entry_p) / entry_p)
 
-                            # Strict Swap Rule: Position MUST be in a real loss (PnL <= -0.30%) and held >= 10 min to be swapped! Never swap out of a green position!
+                            # Strict Swap Rule: Position MUST be an altcoin in real loss (PnL <= -0.30%) and held >= 10 min to be swapped! Never swap out of green positions or Blue Chips!
                             is_stagnant_time = (pos_age_min >= 10.0 and pnl_pct < -0.0030)
                             is_deep_loss = (pnl_pct <= -0.015)
                             rsi_substantially_better = (target_rsi < (curr_rsi - 10.0))
