@@ -408,11 +408,14 @@ class TradingBot:
                     if pos.get('symbol') and pos['symbol'] not in symbols_to_scan:
                         symbols_to_scan.insert(0, pos['symbol'])
 
-                # Filter out symbols currently in Cooldown after LLM rejection
+                # Filter out symbols currently in Cooldown after LLM rejection. Symbols we
+                # actually hold are never filtered: a cooldown blocks new entries, and dropping
+                # a held symbol here would leave the position with no SL/TP/health monitoring.
                 now = time.time()
+                held_symbols = {p.get('symbol') for p in self.active_positions}
                 active_scan_symbols = [
-                    s for s in symbols_to_scan 
-                    if now >= self.rejected_cooldowns.get(s, 0)
+                    s for s in symbols_to_scan
+                    if s in held_symbols or now >= self.rejected_cooldowns.get(s, 0)
                 ]
 
                 # Check BTC Gravity Shield: If Bitcoin is dumping on 5m, pause new altcoin BUY entries

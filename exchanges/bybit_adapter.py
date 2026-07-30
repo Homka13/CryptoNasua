@@ -83,6 +83,40 @@ class BybitExchangeAdapter(BaseExchangeAdapter):
     def fetch_ticker(self, symbol: str) -> Dict[str, Any]:
         return self.exchange.fetch_ticker(symbol)
 
+    def _verify_filled(self, order: Dict[str, Any], symbol: str) -> Dict[str, Any]:
+        """Confirms an order was not rejected by the matching engine.
+
+        Bybit acks an order over REST (retCode 0) and only then rejects it asynchronously,
+        so a successful create_order() call is not proof of execution. Without this check a
+        rejected order looks identical to a filled one and the bot drops the position from
+        tracking while the coins are still sitting in the wallet.
+        """
+        order_id = order.get('id') or order.get('info', {}).get('orderId')
+        if not order_id:
+            return order
+
+        for attempt in range(3):
+            time.sleep(0.4)
+            try:
+                fetched = self.exchange.fetch_order(order_id, symbol)
+            except Exception as e:
+                logger.debug(f"Could not verify order {order_id} (attempt {attempt + 1}): {e}")
+                continue
+
+            raw = fetched.get('info', {}) or {}
+            status = (raw.get('orderStatus') or fetched.get('status') or '').lower()
+            filled = float(fetched.get('filled') or raw.get('cumExecQty') or 0)
+
+            if status in ('rejected', 'cancelled', 'canceled') and filled <= 0:
+                reject_reason = raw.get('rejectReason') or status
+                raise Exception(f"Order {order_id} rejected by exchange: {reject_reason}")
+            if filled > 0 or status in ('filled', 'closed'):
+                return fetched
+            # Still 'new'/'partiallyfilled' — resting in the book, treat as live.
+            return fetched
+
+        return order
+
     def create_spot_order(self, symbol: str, order_type: str, side: str, amount: float, price: float) -> Dict[str, Any]:
         try:
             if not self.exchange.markets:
@@ -101,19 +135,21 @@ class BybitExchangeAdapter(BaseExchangeAdapter):
             formatted_price = float(self.exchange.price_to_precision(symbol, price)) if price > 0 else None
 
             if order_type == 'market' or formatted_price is None:
-                return self.exchange.create_order(symbol, 'market', side, formatted_amount)
-            
+                return self._verify_filled(self.exchange.create_order(symbol, 'market', side, formatted_amount), symbol)
+
+            # NOTE: postOnly is deliberately NOT used here. These limit orders are priced to
+            # cross the spread on purpose (see execute_smart_order), so Bybit's matching engine
+            # rejects them with EC_PostOnlyWillTakeLiquidity — and it does so *asynchronously*,
+            # returning HTTP 200 with retCode 0, so no exception is ever raised. "Maker-only"
+            # and "fill immediately" are mutually exclusive; execution certainty wins here.
             try:
-                # Use postOnly=True to guarantee MAKER execution (0.00% / reduced exchange fee)
-                return self.exchange.create_order(symbol, order_type, side, formatted_amount, formatted_price, params={'postOnly': True})
+                order = self.exchange.create_order(symbol, order_type, side, formatted_amount, formatted_price)
+                return self._verify_filled(order, symbol)
             except Exception as limit_err:
                 err_msg = str(limit_err)
-                if "postonly" in err_msg.lower() or "post-only" in err_msg.lower():
-                    # If postOnly rejected because price crossed market, execute standard limit order
-                    return self.exchange.create_order(symbol, order_type, side, formatted_amount, formatted_price)
                 if "170193" in err_msg or "higher than" in err_msg.lower() or "lower than" in err_msg.lower():
                     logger.warning(f"⚠️ Bybit Price Collar limit hit ({err_msg}). Falling back to MARKET order for {symbol}...")
-                    return self.exchange.create_order(symbol, 'market', side, formatted_amount)
+                    return self._verify_filled(self.exchange.create_order(symbol, 'market', side, formatted_amount), symbol)
                 raise limit_err
         except Exception as e:
             logger.error(f"Bybit Order creation error for {symbol}: {e}")
@@ -124,20 +160,21 @@ class BybitExchangeAdapter(BaseExchangeAdapter):
         if target_sym == "AUTO":
             target_sym = "SHIB/USDT"
 
-        # 1. Spread Trap Filter: Check live orderbook spread
-        try:
-            ticker = self.exchange.fetch_ticker(target_sym)
-            bid_price = float(ticker.get('bid') or current_price)
-            ask_price = float(ticker.get('ask') or current_price)
-            spread_pct = ((ask_price - bid_price) / (bid_price + 1e-10)) * 100.0
+        # 1. Spread Trap Filter: only block *entries* on a wide spread. An exit must never be
+        # blocked by it — refusing to sell is what leaves a position stuck in a falling market.
+        if side == 'buy':
+            spread_pct = None
+            try:
+                ticker = self.exchange.fetch_ticker(target_sym)
+                bid_price = float(ticker.get('bid') or current_price)
+                ask_price = float(ticker.get('ask') or current_price)
+                spread_pct = ((ask_price - bid_price) / (bid_price + 1e-10)) * 100.0
+            except Exception as spread_err:
+                logger.debug(f"Spread check skipped for {target_sym}: {spread_err}")
 
-            if spread_pct > 0.30:
+            if spread_pct is not None and spread_pct > 0.30:
                 logger.warning(f"🛑 SPREAD TRAP REJECTION: {target_sym} orderbook spread ({spread_pct:.3f}%) exceeds max limit (0.30%). Entry skipped.")
                 raise Exception(f"Spread too wide ({spread_pct:.2f}% > 0.30%)")
-        except Exception as spread_err:
-            if "SPREAD TRAP REJECTION" in str(spread_err):
-                raise spread_err
-            logger.debug(f"Spread check fallback: {spread_err}")
 
         # Use exact current market price for buy orders to strictly respect Bybit price collar
         limit_price = current_price if side == 'buy' else current_price * 0.9995
