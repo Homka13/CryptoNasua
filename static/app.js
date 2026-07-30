@@ -462,7 +462,7 @@ function initApp() {
     }
 
     function renderAiVerdicts(verdicts) {
-        const listContainer = document.getElementById('trade-actions-list');
+        const listContainer = document.getElementById('ai-verdicts-list');
         const aiCount = document.getElementById('ai-verdicts-count');
         if (!listContainer) return;
 
