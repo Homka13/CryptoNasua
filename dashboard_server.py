@@ -163,6 +163,18 @@ class DashboardServer:
         except Exception:
             pass
 
+        active_pos_payload = None
+        if self.bot.current_position:
+            active_pos_payload = dict(self.bot.current_position)
+            pos_sym = active_pos_payload.get('symbol')
+            pos_meta = getattr(self.bot, 'active_position_meta', {})
+            if pos_meta and pos_meta.get('symbol') == pos_sym:
+                active_pos_payload['current_price'] = pos_meta.get('price', active_pos_payload.get('entry_price'))
+                active_pos_payload['rsi'] = pos_meta.get('rsi', 50.0)
+                active_pos_payload['trend'] = pos_meta.get('trend', 'UNKNOWN')
+                active_pos_payload['ema_fast'] = pos_meta.get('ema_fast', 0.0)
+                active_pos_payload['ema_slow'] = pos_meta.get('ema_slow', 0.0)
+
         active_ex = getattr(config, 'active_exchange', getattr(config, 'exchange_name', 'bybit')).upper()
         payload = {
             'symbol': meta.get('symbol', config.symbol),
@@ -189,7 +201,7 @@ class DashboardServer:
             'trading_mode_display': config.trading_mode_display,
             'min_llm_confidence': config.min_llm_confidence,
             'prevent_sleep': getattr(config, 'prevent_sleep', True),
-            'active_position': self.bot.current_position,
+            'active_position': active_pos_payload,
             'scan_logs': list(getattr(self.bot, 'scan_logs', []))
         }
         return web.json_response(payload)

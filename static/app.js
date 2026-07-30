@@ -337,7 +337,7 @@ function initApp() {
             if (posContent) {
                 if (data.active_position) {
                     const pos = data.active_position;
-                    const currPrice = data.current_price || pos.entry_price;
+                    const currPrice = pos.current_price || pos.entry_price;
                     const pnl = ((currPrice - pos.entry_price) / pos.entry_price) * 100;
                     const pnlUsdt = (currPrice - pos.entry_price) * pos.amount;
                     const pnlClass = pnl >= 0 ? 'text-green' : 'text-red';
@@ -348,9 +348,14 @@ function initApp() {
                     const entryTimestamp = pos.entry_time ? pos.entry_time * 1000 : (pos.timestamp || Date.now());
                     const holdMin = Math.max(0, (Date.now() - entryTimestamp) / (1000 * 60));
 
-                    const rsiVal = data.rsi ? data.rsi.toFixed(1) : 'N/A';
-                    const rsiColor = data.rsi <= 30 ? '#48bb78' : (data.rsi >= 70 ? '#f56565' : '#63b3ed');
-                    const trendColor = data.trend === 'BULLISH' ? '#48bb78' : (data.trend === 'BEARISH' ? '#f56565' : '#a0aec0');
+                    const posRsi = pos.rsi !== undefined ? pos.rsi : (data.rsi || 50.0);
+                    const posTrend = pos.trend || data.trend || 'UNKNOWN';
+                    const posEmaFast = pos.ema_fast || data.ema_fast;
+                    const posEmaSlow = pos.ema_slow || data.ema_slow;
+
+                    const rsiVal = posRsi.toFixed(1);
+                    const rsiColor = posRsi <= 30 ? '#48bb78' : (posRsi >= 70 ? '#f56565' : '#63b3ed');
+                    const trendColor = posTrend === 'BULLISH' ? '#48bb78' : (posTrend === 'BEARISH' ? '#f56565' : '#a0aec0');
 
                     posContent.innerHTML = `
                         <div style="display: flex; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; gap: 16px;">
@@ -374,8 +379,8 @@ function initApp() {
                                 <div style="font-size: 0.83rem; background: rgba(255,255,255,0.03); padding: 6px 12px; border-radius: 6px; border: 1px solid rgba(255,255,255,0.06); display: flex; gap: 14px; flex-wrap: wrap; color: #cbd5e0;">
                                     <span>🔎 <strong>Текучий стан:</strong></span>
                                     <span>RSI: <strong style="color: ${rsiColor}">${rsiVal}</strong></span>
-                                    <span>Тренд: <strong style="color: ${trendColor}">${data.trend || 'UNKNOWN'}</strong></span>
-                                    <span>EMA20/50: <strong>$${data.ema_fast ? (data.ema_fast < 0.01 ? data.ema_fast.toFixed(8) : data.ema_fast.toFixed(4)) : '-'} / $${data.ema_slow ? (data.ema_slow < 0.01 ? data.ema_slow.toFixed(8) : data.ema_slow.toFixed(4)) : '-'}</strong></span>
+                                    <span>Тренд: <strong style="color: ${trendColor}">${posTrend}</strong></span>
+                                    <span>EMA20/50: <strong>$${posEmaFast ? (posEmaFast < 0.01 ? posEmaFast.toFixed(8) : posEmaFast.toFixed(4)) : '-'} / $${posEmaSlow ? (posEmaSlow < 0.01 ? posEmaSlow.toFixed(8) : posEmaSlow.toFixed(4)) : '-'}</strong></span>
                                 </div>
                             </div>
                             <button id="close-position-btn" class="btn btn-sm btn-danger" style="font-weight: bold; padding: 10px 18px; border-radius: 6px; margin-top: 4px;">

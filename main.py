@@ -204,6 +204,8 @@ class TradingBot:
                         meta['reason'] = reason
                         meta['symbol'] = sym
                         self.latest_meta = meta
+                        if pos_for_sym:
+                            self.active_position_meta = meta
 
                         scan_entry = {
                             'time': time.strftime("%H:%M:%S"),
