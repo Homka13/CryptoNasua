@@ -18,6 +18,11 @@ class BaseExchangeAdapter(ABC):
         pass
 
     @abstractmethod
+    def fetch_ticker(self, symbol: str) -> Dict[str, Any]:
+        """Fetches the latest ticker (bid/ask/last price) for a symbol."""
+        pass
+
+    @abstractmethod
     def create_spot_order(self, symbol: str, order_type: str, side: str, amount: float, price: float) -> Dict[str, Any]:
         """Creates a spot buy/sell order."""
         pass

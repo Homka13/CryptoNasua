@@ -80,6 +80,9 @@ class BybitExchangeAdapter(BaseExchangeAdapter):
     def fetch_balance(self, symbol: Optional[str] = None) -> Dict[str, Any]:
         return self.exchange.fetch_balance()
 
+    def fetch_ticker(self, symbol: str) -> Dict[str, Any]:
+        return self.exchange.fetch_ticker(symbol)
+
     def create_spot_order(self, symbol: str, order_type: str, side: str, amount: float, price: float) -> Dict[str, Any]:
         try:
             if not self.exchange.markets:
@@ -101,9 +104,13 @@ class BybitExchangeAdapter(BaseExchangeAdapter):
                 return self.exchange.create_order(symbol, 'market', side, formatted_amount)
             
             try:
-                return self.exchange.create_order(symbol, order_type, side, formatted_amount, formatted_price)
+                # Use postOnly=True to guarantee MAKER execution (0.00% / reduced exchange fee)
+                return self.exchange.create_order(symbol, order_type, side, formatted_amount, formatted_price, params={'postOnly': True})
             except Exception as limit_err:
                 err_msg = str(limit_err)
+                if "postonly" in err_msg.lower() or "post-only" in err_msg.lower():
+                    # If postOnly rejected because price crossed market, execute standard limit order
+                    return self.exchange.create_order(symbol, order_type, side, formatted_amount, formatted_price)
                 if "170193" in err_msg or "higher than" in err_msg.lower() or "lower than" in err_msg.lower():
                     logger.warning(f"⚠️ Bybit Price Collar limit hit ({err_msg}). Falling back to MARKET order for {symbol}...")
                     return self.exchange.create_order(symbol, 'market', side, formatted_amount)
@@ -116,6 +123,21 @@ class BybitExchangeAdapter(BaseExchangeAdapter):
         target_sym = symbol if symbol and symbol != "AUTO" else getattr(config, 'symbol', 'SHIB/USDT')
         if target_sym == "AUTO":
             target_sym = "SHIB/USDT"
+
+        # 1. Spread Trap Filter: Check live orderbook spread
+        try:
+            ticker = self.exchange.fetch_ticker(target_sym)
+            bid_price = float(ticker.get('bid') or current_price)
+            ask_price = float(ticker.get('ask') or current_price)
+            spread_pct = ((ask_price - bid_price) / (bid_price + 1e-10)) * 100.0
+
+            if spread_pct > 0.30:
+                logger.warning(f"🛑 SPREAD TRAP REJECTION: {target_sym} orderbook spread ({spread_pct:.3f}%) exceeds max limit (0.30%). Entry skipped.")
+                raise Exception(f"Spread too wide ({spread_pct:.2f}% > 0.30%)")
+        except Exception as spread_err:
+            if "SPREAD TRAP REJECTION" in str(spread_err):
+                raise spread_err
+            logger.debug(f"Spread check fallback: {spread_err}")
 
         # Use exact current market price for buy orders to strictly respect Bybit price collar
         limit_price = current_price if side == 'buy' else current_price * 0.9995

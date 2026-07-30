@@ -35,6 +35,10 @@ class PaperExchangeAdapter(BaseExchangeAdapter):
             base_currency: {'free': self.asset_balance, 'used': 0.0, 'total': self.asset_balance}
         }
 
+    def fetch_ticker(self, symbol: str) -> Dict[str, Any]:
+        target = symbol if symbol and symbol != "AUTO" else "SHIB/USDT"
+        return self.public_exchange.fetch_ticker(target)
+
     def create_spot_order(self, symbol: str, order_type: str, side: str, amount: float, price: float) -> Dict[str, Any]:
         self.order_id_counter += 1
         order = {

@@ -189,12 +189,20 @@ class TelegramInterface:
             return self.get_balance_fn()
         return "💰 *Balance*: Initial $10.00 USDT"
 
-    async def send_alert(self, text: str):
-        """Sends a high-priority push alert message to the configured Telegram chat."""
+    async def send_alert(self, text: str, is_critical: bool = True):
+        """Sends a push alert message to Telegram with rate-limiting protection."""
         if not self.app or not self.chat_id:
             logger.info(f"[TELEGRAM ALERT LOG]: {text}")
             return
+        
+        now = time.time()
+        # Throttle non-critical messages if sent within 10 seconds of last alert
+        if not is_critical and (now - getattr(self, 'last_alert_time', 0)) < 10.0:
+            logger.info(f"[TELEGRAM THROTTLED ALERT]: {text}")
+            return
+
         try:
+            self.last_alert_time = now
             await self.app.bot.send_message(chat_id=self.chat_id, text=text, parse_mode="Markdown")
         except Exception as e:
             logger.error(f"Error sending Telegram alert: {e}")

@@ -52,6 +52,9 @@ class BinanceExchangeAdapter(BaseExchangeAdapter):
     def fetch_balance(self, symbol: Optional[str] = None) -> Dict[str, Any]:
         return self.exchange.fetch_balance()
 
+    def fetch_ticker(self, symbol: str) -> Dict[str, Any]:
+        return self.exchange.fetch_ticker(symbol)
+
     def create_spot_order(self, symbol: str, order_type: str, side: str, amount: float, price: float) -> Dict[str, Any]:
         try:
             if not self.exchange.markets:

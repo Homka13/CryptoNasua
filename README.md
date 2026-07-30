@@ -31,10 +31,8 @@
 CryptoNasua/
 ├── main.py                # Головний оркестратор та асинхронний цикл бота
 ├── config.py              # Завантаження та валідація конфігурації (.env)
-├── strategy.py            # Логіка технічного аналізу (RSI, EMA, TP/SL)
-├── exchange_service.py    # Інтеграція з Bybit через CCXT та Paper Trading симулятор
-├── risk_manager.py        # Контроль просідання, розміру позицій та лімітів
-├── llm_analyst.py         # Аналітичний модуль ШІ (Gemini / OpenAI API)
+├── core/                  # Логіка бота: strategy.py (RSI, EMA, BB), risk_manager.py, llm_analyst.py
+├── exchanges/             # Адаптери бірж (Bybit, Binance, Paper Trading) через CCXT
 ├── telegram_bot.py        # Телеграм-бот для сповіщень та інтерфейсу
 ├── dashboard_server.py    # Асинхронний Web Dashboard сервер (aiohttp)
 ├── backtest.py            # Модуль тестування на історичних даних

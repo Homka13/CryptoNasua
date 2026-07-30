@@ -24,6 +24,9 @@ class LLMAnalyst:
         if not config.use_llm_confirmation:
             return True, "LLM Confirmation disabled in config"
 
+        if meta.get('skip_llm', False):
+            return True, "⚡ FAST MATH EXECUTION (LLM bypassed for 0ms breakout speed)"
+
         key = (config.deepseek_api_key or config.llm_api_key or os.getenv("DEEPSEEK_API_KEY", "") or os.getenv("LLM_API_KEY", "")).strip()
         if not key or key == "your_deepseek_api_key_here":
             return True, "No LLM API key configured (Bypassed filter)"
@@ -47,6 +50,7 @@ Analyze the following technical setup for pair: {symbol} on {timeframe} timefram
 - RSI (14): {meta.get('rsi', 0):.1f}
 - EMA 20: ${meta.get('ema_fast', 0):.4f}
 - EMA 50: ${meta.get('ema_slow', 0):.4f}
+- Lower Bollinger Band (20,2): ${meta.get('bb_lower', 0):.4f}
 - Market Trend: {meta.get('trend', 'UNKNOWN')}
 - Strategy Signal Reason: {strategy_reason}
 - Trading Mode: {config.trading_mode_display} (Min Confidence Required: {config.min_llm_confidence}%)

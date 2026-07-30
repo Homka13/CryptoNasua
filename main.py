@@ -47,7 +47,8 @@ logging.basicConfig(
     handlers=[
         logging.StreamHandler(sys.stdout),
         log_file_handler
-    ]
+    ],
+    force=True
 )
 logger = logging.getLogger(__name__)
 
@@ -198,8 +199,19 @@ class TradingBot:
         )
 
         import time
+        self.last_heartbeat = time.time()
         while True:
             try:
+                # 60-second Exchange Connection Heartbeat Check
+                if time.time() - getattr(self, 'last_heartbeat', 0) > 60:
+                    try:
+                        self.exchange.fetch_ticker('BTC/USDT')
+                        self.last_heartbeat = time.time()
+                    except Exception as heartbeat_err:
+                        logger.error(f"⚠️ HEARTBEAT DISCONNECTION DETECTED: {heartbeat_err}")
+                        await self.telegram.send_alert("⚠️ *WARNING: Lost exchange API connection! Re-establishing...*")
+                        self.last_heartbeat = time.time()
+
                 if not getattr(self, 'trading_active', False):
                     await asyncio.sleep(2)
                     continue
@@ -278,6 +290,12 @@ class TradingBot:
 
                             logger.info(f"Executing SELL for {sym} ({amount:.4f} coins @ ${curr_p:.2f}). Reason: {reason}")
                             orders = self.exchange.execute_smart_order('sell', amount, curr_p, symbol=sym)
+
+                            # If Stop-Loss triggered, activate 15-minute symbol cooldown to prevent re-entering a dumping coin
+                            if "STOP LOSS" in reason.upper() or "STOP_LOSS" in reason.upper():
+                                cooldown_until = time.time() + (15 * 60)
+                                self.rejected_cooldowns[sym] = cooldown_until
+                                logger.warning(f"🛑 STOP-LOSS HIT on {sym}. Symbol cooldown activated for 15 minutes.")
 
                             self.trade_actions.appendleft({
                                 'timestamp': int(time.time() * 1000),
