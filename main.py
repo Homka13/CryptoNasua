@@ -722,12 +722,12 @@ class TradingBot:
                             target_rsi = float(best_buy_opportunity['meta'].get('rsi', 50) or 50)
                             pnl_pct = ((curr_p - entry_p) / entry_p)
 
-                            # Strict Swap Rule: Must be held for >= 8.0 min (or PnL <= -1.2%), and new candidate must have RSI at least 8 pts lower
-                            is_stagnant_time = (pos_age_min >= 8.0 and pnl_pct < 0.001)
-                            is_deep_loss = (pnl_pct <= -0.012)
-                            rsi_substantially_better = (target_rsi < (curr_rsi - 8.0))
+                            # Strict Swap Rule: Position MUST be in a real loss (PnL <= -0.30%) and held >= 10 min to be swapped! Never swap out of a green position!
+                            is_stagnant_time = (pos_age_min >= 10.0 and pnl_pct < -0.0030)
+                            is_deep_loss = (pnl_pct <= -0.015)
+                            rsi_substantially_better = (target_rsi < (curr_rsi - 10.0))
 
-                            if (is_stagnant_time or is_deep_loss) and rsi_substantially_better:
+                            if (is_stagnant_time or is_deep_loss) and rsi_substantially_better and pnl_pct < 0.0:
                                 should_auto_swap = True
                                 stagnant_info = {'symbol': stagnant_sym, 'amount': pos['amount'], 'price': curr_p, 'age': pos_age_min, 'pnl': pnl_pct}
                                 logger.info(f"🔄 Candidate swap approved: {stagnant_sym} (Age: {pos_age_min:.1f}m, PnL: {pnl_pct*100:+.2f}%, RSI: {curr_rsi:.1f}) → {best_buy_opportunity['symbol']} (RSI: {target_rsi:.1f})")

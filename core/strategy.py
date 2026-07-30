@@ -142,6 +142,21 @@ class HybridStrategy:
             metadata['skip_llm'] = False  # Mandatory DeepSeek LLM Audit
             return 'BUY', f'⚡ BREAKOUT MOMENTUM PUMP SNIPER (Пробой 24h макс ${high_24h:.4f}, Об\'єм x{vol_ratio:.1f})', metadata
 
+        # Count consecutive red candles at the tail
+        consecutive_red = 0
+        for idx in range(len(df_calc) - 1, -1, -1):
+            row = df_calc.iloc[idx]
+            if float(row['close']) < float(row['open']):
+                consecutive_red += 1
+            else:
+                break
+        metadata['consecutive_red'] = consecutive_red
+
+        # NEVER buy a falling knife (4+ consecutive red candles in a row)
+        if consecutive_red >= 3:
+            regime_tag = " [STABLE]" if is_stable else ""
+            return 'HOLD', f'Scanning market (RSI: {rsi_val:.1f}, Falling Knife Block: {consecutive_red} consecutive RED candles){regime_tag}', metadata
+
         # --- ЛОВЕЦЬ ВІДСКОКІВ (ULTRA-DIP REVERSAL: RSI < 25 OR Lower BB Piercing) ---
         prev_candle = df_calc.iloc[-2]
         prev_rsi = float(prev_candle['rsi'])
@@ -151,9 +166,9 @@ class HybridStrategy:
         if (rsi_val <= 25.0 or prev_rsi <= 25.0) and bb_lower_pierce:
             current_candle = latest
             is_green_candle = float(current_candle['close']) > float(current_candle['open'])
-            is_price_rebounding = float(current_candle['close']) > float(prev_candle['close'])
+            is_strong_rebound = is_green_candle and (float(current_candle['close']) > float(prev_candle['close']))
 
-            if is_green_candle or is_price_rebounding:
+            if is_strong_rebound:
                 metadata['skip_llm'] = False  # Mandatory DeepSeek LLM Audit
                 return 'BUY', f'⚡ ЛОВЕЦЬ ВІДСКОКІВ [Ultra-Dip Reversal] (RSI: {rsi_val:.1f} < 25, Пробій нижньої Боллінджера + Зелена свічка розвороту)', metadata
 

@@ -56,14 +56,15 @@ Analyze the following technical setup for pair: {symbol} on {timeframe} timefram
 - Micro-Trend 5-Candle Slope: {meta.get('slope_5_candles_pct', 0.0):+.2f}%
 - 1-Hour Trend Price Change: {meta.get('change_1h_pct', 0.0):+.2f}%
 - EMA 20 Slope (1 Hour): {meta.get('ema20_slope_pct', 0.0):+.2f}%
-- Last 3 Candles Consecutive RED (Falling): {meta.get('last_3_red', False)}
+- Consecutive RED Candles: {meta.get('consecutive_red', 0)}
 - Strategy Signal Reason: {strategy_reason}
 - Trading Mode: {config.trading_mode_display} (Min Confidence Required: {config.min_llm_confidence}%)
 
 Strict Rules:
-1. REJECT if the micro-trend or 1-hour trend is falling (change_1h_pct < -0.20%, EMA20 slope negative, or last 3 candles RED) without a clear green reversal candle. Do NOT buy coins that are slumping or creeping down!
-2. Confirm ONLY if price is rebounding off a strong support level with a green candle or forming a strong bullish breakout pattern.
-3. Respond ONLY in valid JSON with format:
+1. REJECT immediately if consecutive RED candles >= 3 (falling knife crash). NEVER buy a falling knife regardless of how low the RSI is!
+2. REJECT if 1-hour trend is negative (change_1h_pct < -0.20% or EMA20 slope negative) without a strong green reversal candle (current candle MUST be GREEN).
+3. Confirm ONLY if price is clearly rebounding with a GREEN candle off a strong support level or forming a bullish breakout.
+4. Respond ONLY in valid JSON with format:
 {{"verdict": "CONFIRM" or "REJECT", "confidence": 0-100, "reason": "Short 1-sentence Ukrainian explanation"}}"""
 
         # Try primary endpoint, with fallback to OpenAI / OpenRouter if 401 occurs
