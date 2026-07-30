@@ -411,27 +411,39 @@ class DashboardServer:
                 if new_key:
                     config.deepseek_api_key = new_key
                     config.llm_api_key = new_key
+                    config.use_llm_confirmation = True
+                    config.save_persisted_config()
                     try:
                         import os
                         env_path = os.path.join(os.path.dirname(__file__), '.env')
+                        lines = []
                         if os.path.exists(env_path):
                             with open(env_path, 'r', encoding='utf-8') as f:
                                 lines = f.readlines()
-                            new_lines = []
-                            for line in lines:
-                                if line.startswith('DEEPSEEK_API_KEY='):
-                                    new_lines.append(f'DEEPSEEK_API_KEY={new_key}\n')
-                                elif line.startswith('LLM_API_KEY='):
-                                    new_lines.append(f'LLM_API_KEY={new_key}\n')
-                                else:
-                                    new_lines.append(line)
-                            with open(env_path, 'w', encoding='utf-8') as f:
-                                f.writelines(new_lines)
+                        
+                        has_ds = False
+                        has_llm = False
+                        new_lines = []
+                        for line in lines:
+                            if line.startswith('DEEPSEEK_API_KEY='):
+                                new_lines.append(f'DEEPSEEK_API_KEY={new_key}\n')
+                                has_ds = True
+                            elif line.startswith('LLM_API_KEY='):
+                                new_lines.append(f'LLM_API_KEY={new_key}\n')
+                                has_llm = True
+                            else:
+                                new_lines.append(line)
+                        if not has_ds:
+                            new_lines.append(f'DEEPSEEK_API_KEY={new_key}\n')
+                        if not has_llm:
+                            new_lines.append(f'LLM_API_KEY={new_key}\n')
+                        
+                        with open(env_path, 'w', encoding='utf-8') as f:
+                            f.writelines(new_lines)
                     except Exception as env_err:
-                        logger.error(f"Error writing to .env: {env_err}")
-
+                        logger.error(f"Error saving key to .env: {env_err}")
                     masked = f"{new_key[:6]}...{new_key[-4:]}" if len(new_key) > 8 else "set"
-                    return web.json_response({'success': True, 'key_masked': masked})
+                    return web.json_response({'success': True, 'message': 'API Key set successfully', 'key_masked': masked})
                 return web.json_response({'success': False, 'error': 'Key cannot be empty'}, status=400)
 
             return web.json_response({'success': False, 'error': 'Unknown action'}, status=400)

@@ -88,6 +88,34 @@ class TradingConfig:
     max_slippage_pct: float = 0.0020   # 0.20% max allowed orderbook VWAP slippage
     use_iceberg: bool = True
     iceberg_slices: int = 3            # Slice order into 3 equal parts
-    iceberg_delay_sec: float = 5.0     # 5-second interval between iceberg slices
+    def save_persisted_config(self):
+        try:
+            os.makedirs("data", exist_ok=True)
+            data = {
+                "deepseek_api_key": self.deepseek_api_key,
+                "llm_api_key": self.llm_api_key,
+                "use_llm_confirmation": self.use_llm_confirmation,
+                "trading_mode": self.trading_mode
+            }
+            with open("data/config_cache.json", "w", encoding="utf-8") as f:
+                json.dump(data, f, indent=2)
+        except Exception as e:
+            pass
+
+    def load_persisted_config(self):
+        try:
+            if os.path.exists("data/config_cache.json"):
+                with open("data/config_cache.json", "r", encoding="utf-8") as f:
+                    data = json.load(f)
+                    if data.get("deepseek_api_key"):
+                        self.deepseek_api_key = data["deepseek_api_key"]
+                        self.llm_api_key = data.get("llm_api_key", data["deepseek_api_key"])
+                    if "use_llm_confirmation" in data:
+                        self.use_llm_confirmation = data["use_llm_confirmation"]
+                    if "trading_mode" in data:
+                        self.trading_mode = data["trading_mode"]
+        except Exception as e:
+            pass
 
 config = TradingConfig()
+config.load_persisted_config()
