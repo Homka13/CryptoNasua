@@ -380,15 +380,16 @@ function initApp() {
             updateWatchlistBar(data.scan_logs, positions);
             updateTradingViewChart(currentChartSymbol, false);
 
-            // Controls state
-            const toggleActiveBtn = document.getElementById('toggle-active-btn');
-            if (toggleActiveBtn) {
+            // Controls state — sync resume/pause buttons
+            const btnResume = document.getElementById('btn-resume');
+            const btnPause = document.getElementById('btn-pause');
+            if (btnResume && btnPause) {
                 if (data.is_active) {
-                    toggleActiveBtn.innerText = "▶️ Бот працює";
-                    toggleActiveBtn.className = "btn btn-success";
+                    btnResume.className = 'btn btn-sm btn-success';
+                    btnPause.className = 'btn btn-sm btn-outline';
                 } else {
-                    toggleActiveBtn.innerText = "🛑 Бот на паузі";
-                    toggleActiveBtn.className = "btn btn-warning";
+                    btnResume.className = 'btn btn-sm btn-outline';
+                    btnPause.className = 'btn btn-sm btn-danger';
                 }
             }
 
@@ -572,19 +573,6 @@ function initApp() {
     }
 
     // ===== CONTROL HANDLERS =====
-    document.getElementById('toggle-active-btn')?.addEventListener('click', async () => {
-        const btn = document.getElementById('toggle-active-btn');
-        const isCurrentlyActive = btn?.innerText.includes("працює");
-        const action = isCurrentlyActive ? 'pause' : 'resume';
-
-        await fetch('/api/control', {
-            method: 'POST',
-            headers: { 'Authorization': `Bearer ${getAuthToken()}`, 'Content-Type': 'application/json' },
-            body: JSON.stringify({ action })
-        });
-        fetchStatus();
-    });
-
     document.getElementById('btn-resume')?.addEventListener('click', async () => {
         await fetch('/api/control', {
             method: 'POST',
