@@ -88,7 +88,9 @@ class TradingBot:
                         if is_pos_paper and not config.paper_trading:
                             logger.warning(f"⚠️ Demo/Paper position ({pos.get('symbol')}) ignored because bot is running in LIVE mode.")
                             return None
-                        logger.info(f"📌 Loaded active open position from position.json: {pos.get('symbol')} (Paper: {is_pos_paper})")
+                        if 'entry_time' not in pos or not pos['entry_time']:
+                            pos['entry_time'] = os.path.getmtime(pos_file)
+                        logger.info(f"📌 Loaded active open position from position.json: {pos.get('symbol')} (Paper: {is_pos_paper}, Entry Time: {time.strftime('%H:%M:%S', time.localtime(pos['entry_time']))})")
                         return pos
             except Exception as e:
                 logger.error(f"Error loading position.json: {e}")
@@ -101,6 +103,8 @@ class TradingBot:
         try:
             if pos:
                 pos['is_paper'] = config.paper_trading
+                if 'entry_time' not in pos or not pos['entry_time']:
+                    pos['entry_time'] = time.time()
             with open(pos_file, 'w', encoding='utf-8') as f:
                 json.dump(pos or {}, f, indent=2)
         except Exception as e:

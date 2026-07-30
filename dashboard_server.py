@@ -143,25 +143,24 @@ class DashboardServer:
         if not self._verify_session(request):
             return web.json_response({'error': 'Unauthorized'}, status=401)
 
-        meta = self.bot.latest_meta
-        try:
-            bal = self.bot.exchange.fetch_balance()
-            usdt_free = bal.get('USDT', {}).get('free', 0.0)
-            usdt_total = bal.get('USDT', {}).get('total', usdt_free)
-            usdt_used = bal.get('USDT', {}).get('used', 0.0)
-        except Exception as e:
-            logger.error(f"Error fetching balance for dashboard: {e}")
-            usdt_free = 0.0
-            usdt_total = 0.0
-            usdt_used = 0.0
-        
+        now = time.time()
+        if not hasattr(self, '_cached_bal_time') or (now - getattr(self, '_cached_bal_time', 0) > 10.0):
+            try:
+                self._cached_bal = self.bot.exchange.fetch_balance()
+                self._cached_real_bal = self.bot.exchange.fetch_real_balance()
+                self._cached_bal_time = now
+            except Exception as e:
+                logger.error(f"Error fetching balance for dashboard: {e}")
+
+        bal = getattr(self, '_cached_bal', {}) or {}
+        usdt_free = bal.get('USDT', {}).get('free', 0.0)
+        usdt_total = bal.get('USDT', {}).get('total', usdt_free)
+        usdt_used = bal.get('USDT', {}).get('used', 0.0)
+
         real_usdt = None
-        try:
-            real_bal = self.bot.exchange.fetch_real_balance()
-            if real_bal and 'USDT' in real_bal:
-                real_usdt = real_bal['USDT'].get('total', real_bal['USDT'].get('free', 0.0))
-        except Exception:
-            pass
+        real_bal = getattr(self, '_cached_real_bal', {}) or {}
+        if real_bal and 'USDT' in real_bal:
+            real_usdt = real_bal['USDT'].get('total', real_bal['USDT'].get('free', 0.0))
 
         active_pos_payload = None
         if self.bot.current_position:

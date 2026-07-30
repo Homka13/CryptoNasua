@@ -345,7 +345,8 @@ function initApp() {
                     const highestPrice = pos.highest_price || pos.entry_price;
                     const peakGainPct = Math.max(0, ((highestPrice - pos.entry_price) / pos.entry_price) * 100);
                     
-                    const entryTimestamp = pos.entry_time ? pos.entry_time * 1000 : (pos.timestamp || Date.now());
+                    const entryTimeVal = pos.entry_time || pos.timestamp;
+                    const entryTimestamp = entryTimeVal ? (entryTimeVal > 1e11 ? entryTimeVal : entryTimeVal * 1000) : Date.now();
                     const holdMin = Math.max(0, (Date.now() - entryTimestamp) / (1000 * 60));
 
                     const posRsi = pos.rsi !== undefined ? pos.rsi : (data.rsi || 50.0);
