@@ -442,6 +442,13 @@ class TradingBot:
         self.last_heartbeat = time.time()
         while True:
             try:
+                # Sync any untracked tradable coins in wallet (>= $5.00) into active_positions
+                if not config.paper_trading:
+                    try:
+                        self._sync_positions_with_wallet()
+                    except Exception as sync_err:
+                        logger.debug(f"Wallet position sync error: {sync_err}")
+
                 # 60-second Exchange Connection Heartbeat Check
                 if time.time() - getattr(self, 'last_heartbeat', 0) > 60:
                     try:
