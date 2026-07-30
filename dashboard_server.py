@@ -27,6 +27,8 @@ class DashboardServer:
         self.app.router.add_post('/api/auth/login', self.handle_password_login)
         self.app.router.add_get('/api/status', self.handle_get_status)
         self.app.router.add_get('/api/orders', self.handle_get_orders)
+        self.app.router.add_get('/api/history', self.handle_get_history)
+        self.app.router.add_get('/api/export/csv', self.handle_export_csv)
         self.app.router.add_get('/api/klines', self.handle_get_klines)
         self.app.router.add_post('/api/control', self.handle_post_control)
         
@@ -275,6 +277,36 @@ class DashboardServer:
             'ai_verdicts': verdicts,
             'order_history': all_items
         })
+
+    async def handle_get_history(self, request: web.Request) -> web.Response:
+        """Returns clean chronological list of completed BUY/SELL trade actions."""
+        if not self._verify_session(request):
+            return web.json_response({'error': 'Unauthorized'}, status=401)
+
+        trade_actions = list(getattr(self.bot, 'trade_actions', []))
+        return web.json_response({
+            'success': True,
+            'total_trades': len(trade_actions),
+            'history': trade_actions
+        })
+
+    async def handle_export_csv(self, request: web.Request) -> web.Response:
+        """Exports trade actions history as a CSV file."""
+        if not self._verify_session(request):
+            return web.json_response({'error': 'Unauthorized'}, status=401)
+
+        trade_actions = list(getattr(self.bot, 'trade_actions', []))
+        csv_lines = ["Time,Symbol,Side,Amount,Price,EntryPrice,PnL_Pct,PnL_USDT,Status,Reason\n"]
+        for t in trade_actions:
+            line = f"{t.get('time','')},{t.get('symbol','')},{t.get('side','')},{t.get('amount',0)},{t.get('price',0)},{t.get('entry_price',0)},{t.get('pnl_pct',0)},{t.get('pnl_usdt',0)},{t.get('status','')},\"{t.get('reason','')}\"\n"
+            csv_lines.append(line)
+
+        csv_text = "".join(csv_lines)
+        return web.Response(
+            text=csv_text,
+            content_type='text/csv',
+            headers={'Content-Disposition': 'attachment; filename="trade_history.csv"'}
+        )
 
     async def handle_get_klines(self, request: web.Request) -> web.Response:
         if not self._verify_session(request):
