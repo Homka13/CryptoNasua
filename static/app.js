@@ -475,7 +475,7 @@ function initApp() {
     document.getElementById('btn-exec-paper')?.addEventListener('click', async () => {
         await fetch('/api/control', {
             method: 'POST',
-            headers: { 'Authorization': `Bearer ${authToken}`, 'Content-Type': 'application/json' },
+            headers: { 'Authorization': `Bearer ${getAuthToken()}`, 'Content-Type': 'application/json' },
             body: JSON.stringify({ action: 'set_execution_mode', mode: 'paper' })
         });
         fetchStatus();
@@ -485,7 +485,7 @@ function initApp() {
         if (confirm("⚠️ УВАГА: Ви вмикаєте РЕАЛЬНУ торгівлю на Bybit! Продовжити?")) {
             await fetch('/api/control', {
                 method: 'POST',
-                headers: { 'Authorization': `Bearer ${authToken}`, 'Content-Type': 'application/json' },
+                headers: { 'Authorization': `Bearer ${getAuthToken()}`, 'Content-Type': 'application/json' },
                 body: JSON.stringify({ action: 'set_execution_mode', mode: 'live' })
             });
             fetchStatus();
@@ -501,7 +501,7 @@ function initApp() {
         }
         const resp = await fetch('/api/control', {
             method: 'POST',
-            headers: { 'Authorization': `Bearer ${authToken}`, 'Content-Type': 'application/json' },
+            headers: { 'Authorization': `Bearer ${getAuthToken()}`, 'Content-Type': 'application/json' },
             body: JSON.stringify({ action: 'set_llm_key', key })
         });
         const resData = await resp.json();
@@ -514,10 +514,14 @@ function initApp() {
         }
     });
 
+    function getAuthToken() {
+        return localStorage.getItem('bot_auth_token') || authToken || '';
+    }
+
     document.getElementById('btn-mode-chill')?.addEventListener('click', async () => {
         await fetch('/api/control', {
             method: 'POST',
-            headers: { 'Authorization': `Bearer ${authToken}`, 'Content-Type': 'application/json' },
+            headers: { 'Authorization': `Bearer ${getAuthToken()}`, 'Content-Type': 'application/json' },
             body: JSON.stringify({ action: 'set_trading_mode', mode: 'chill' })
         });
         fetchStatus();
@@ -526,7 +530,7 @@ function initApp() {
     document.getElementById('btn-mode-hunt')?.addEventListener('click', async () => {
         await fetch('/api/control', {
             method: 'POST',
-            headers: { 'Authorization': `Bearer ${authToken}`, 'Content-Type': 'application/json' },
+            headers: { 'Authorization': `Bearer ${getAuthToken()}`, 'Content-Type': 'application/json' },
             body: JSON.stringify({ action: 'set_trading_mode', mode: 'hunt' })
         });
         fetchStatus();
@@ -536,7 +540,7 @@ function initApp() {
         const provider = e.target.value;
         await fetch('/api/control', {
             method: 'POST',
-            headers: { 'Authorization': `Bearer ${authToken}`, 'Content-Type': 'application/json' },
+            headers: { 'Authorization': `Bearer ${getAuthToken()}`, 'Content-Type': 'application/json' },
             body: JSON.stringify({ action: 'set_llm_provider', provider })
         });
         fetchStatus();
@@ -546,7 +550,7 @@ function initApp() {
         const exchange = e.target.value;
         await fetch('/api/control', {
             method: 'POST',
-            headers: { 'Authorization': `Bearer ${authToken}`, 'Content-Type': 'application/json' },
+            headers: { 'Authorization': `Bearer ${getAuthToken()}`, 'Content-Type': 'application/json' },
             body: JSON.stringify({ action: 'set_exchange', exchange })
         });
         fetchStatus();
@@ -555,7 +559,7 @@ function initApp() {
     document.getElementById('toggle-execution-mode-btn')?.addEventListener('click', async () => {
         await fetch('/api/control', {
             method: 'POST',
-            headers: { 'Authorization': `Bearer ${authToken}`, 'Content-Type': 'application/json' },
+            headers: { 'Authorization': `Bearer ${getAuthToken()}`, 'Content-Type': 'application/json' },
             body: JSON.stringify({ action: 'toggle_mode' })
         });
         fetchStatus();
@@ -564,7 +568,7 @@ function initApp() {
     document.getElementById('toggle-sleep-btn')?.addEventListener('click', async () => {
         await fetch('/api/control', {
             method: 'POST',
-            headers: { 'Authorization': `Bearer ${authToken}`, 'Content-Type': 'application/json' },
+            headers: { 'Authorization': `Bearer ${getAuthToken()}`, 'Content-Type': 'application/json' },
             body: JSON.stringify({ action: 'toggle_prevent_sleep' })
         });
         fetchStatus();
@@ -574,7 +578,7 @@ function initApp() {
         const symbol = e.target.value;
         await fetch('/api/control', {
             method: 'POST',
-            headers: { 'Authorization': `Bearer ${authToken}`, 'Content-Type': 'application/json' },
+            headers: { 'Authorization': `Bearer ${getAuthToken()}`, 'Content-Type': 'application/json' },
             body: JSON.stringify({ action: 'change_symbol', symbol })
         });
         fetchStatus();
@@ -656,12 +660,6 @@ function updateTradingViewChart(symbolStr, forceUpdate = false) {
     } catch (err) {
         console.error("TradingView widget init error:", err);
     }
-}
-
-if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', initApp);
-} else {
-    initApp();
 }
 
 if (document.readyState === 'loading') {
