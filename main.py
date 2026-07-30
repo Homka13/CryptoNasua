@@ -64,14 +64,46 @@ class TradingBot:
         self.risk_manager = RiskManager()
         self.llm_analyst = LLMAnalyst()
         self.active_positions: list = self._load_positions()
+        self.trade_actions: deque = self._load_trade_history()
         self._sync_wallet_positions()
         self.latest_meta: Dict[str, Any] = {}
         self.active_position_metas: Dict[str, Dict[str, Any]] = {}
         self.rejected_cooldowns: Dict[str, float] = {}
         self.scan_logs = deque(maxlen=30)
         self.ai_verdicts = deque(maxlen=30)
-        self.trade_actions = deque(maxlen=50)
         self.max_concurrent_positions = 3
+
+        # Trading active flag
+        self.trading_active = True
+
+        # Initialize Telegram
+        self.telegram = TelegramInterface(
+            get_status_fn=self.get_bot_status_str,
+            get_balance_fn=self.get_balance_str
+        )
+
+    def _load_trade_history(self) -> deque:
+        history_file = os.path.join(os.path.dirname(__file__), "data", "trade_history.json")
+        items = []
+        if os.path.exists(history_file):
+            try:
+                with open(history_file, 'r', encoding='utf-8') as f:
+                    items = json.load(f)
+                    if not isinstance(items, list):
+                        items = []
+            except Exception as e:
+                logger.error(f"Error loading trade_history.json: {e}")
+        return deque(items, maxlen=500)
+
+    def _save_trade_history(self) -> None:
+        data_dir = os.path.join(os.path.dirname(__file__), "data")
+        os.makedirs(data_dir, exist_ok=True)
+        history_file = os.path.join(data_dir, "trade_history.json")
+        try:
+            with open(history_file, 'w', encoding='utf-8') as f:
+                json.dump(list(self.trade_actions), f, indent=2)
+        except Exception as e:
+            logger.error(f"Error saving trade_history.json: {e}")
         
         # Trading active flag
         self.trading_active = True
@@ -417,6 +449,7 @@ class TradingBot:
             'reason': reason if not error_msg else f"{reason} | ⚠️ {error_msg}",
             'status': status
         })
+        self._save_trade_history()
 
         if status == 'EXCHANGE_REJECTED':
             if "Insufficient balance" in error_msg or "170131" in error_msg:
@@ -754,6 +787,7 @@ class TradingBot:
                                 'reason': f"🔄 AUTO-SWAP → {target_sym}",
                                 'status': 'FILLED'
                             })
+                            self._save_trade_history()
 
                             self.scan_logs.appendleft({
                                 'time': time.strftime("%H:%M:%S"),
@@ -847,6 +881,7 @@ class TradingBot:
                                 'reason': target_reason,
                                 'status': 'FILLED'
                             })
+                            self._save_trade_history()
 
                             self.scan_logs.appendleft({
                                 'time': time.strftime("%H:%M:%S"),
