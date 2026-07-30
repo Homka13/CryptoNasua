@@ -174,8 +174,10 @@ function initApp() {
 
         fetchStatus();
         fetchOrders();
+        fetchHistory();
         setInterval(fetchStatus, 3000);
         setInterval(fetchOrders, 5000);
+        setInterval(fetchHistory, 5000);
     }
 
     // ===== PLATFORM TABS =====
@@ -692,11 +694,23 @@ function initApp() {
             }
 
             listContainer.innerHTML = html;
-
-            // Render Dedicated Scrollable Trade History Table
-            renderHistoryTable(tradeActions);
         } catch (err) {
             console.error("Orders polling error:", err);
+        }
+    }
+
+    async function fetchHistory() {
+        try {
+            const resp = await fetch('/api/history', {
+                headers: { 'Authorization': `Bearer ${getAuthToken()}` }
+            });
+            if (!resp.ok) return;
+            const data = await resp.json();
+            if (data.success && data.history) {
+                renderHistoryTable(data.history);
+            }
+        } catch (err) {
+            console.error("History polling error:", err);
         }
     }
 
