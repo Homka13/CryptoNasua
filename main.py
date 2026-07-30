@@ -140,10 +140,15 @@ class TradingBot:
         )
 
     def _load_positions(self) -> list:
-        pos_file = os.path.join(os.path.dirname(__file__), "data", "position.json")
-        if os.path.exists(pos_file):
+        data_dir = os.path.join(os.path.dirname(__file__), "data")
+        file_name = "paper_position.json" if config.paper_trading else "live_position.json"
+        pos_file = os.path.join(data_dir, file_name)
+        legacy_file = os.path.join(data_dir, "position.json")
+
+        target_file = pos_file if os.path.exists(pos_file) else (legacy_file if os.path.exists(legacy_file) else None)
+        if target_file and os.path.exists(target_file):
             try:
-                with open(pos_file, 'r', encoding='utf-8') as f:
+                with open(target_file, 'r', encoding='utf-8') as f:
                     data = json.load(f)
                     if isinstance(data, list):
                         positions = data
@@ -157,17 +162,31 @@ class TradingBot:
                         if not isinstance(pos, dict) or pos.get('amount', 0) <= 0:
                             continue
                         is_pos_paper = pos.get('is_paper', True)
-                        if is_pos_paper and not config.paper_trading:
-                            logger.warning(f"⚠️ Paper position ({pos.get('symbol')}) ignored — bot is in LIVE mode.")
+                        if is_pos_paper != config.paper_trading and os.path.exists(pos_file):
                             continue
                         if 'entry_time' not in pos or not pos['entry_time']:
-                            pos['entry_time'] = os.path.getmtime(pos_file)
+                            pos['entry_time'] = os.path.getmtime(target_file)
                         logger.info(f"📌 Loaded position: {pos.get('symbol')} (Paper: {is_pos_paper})")
                         valid.append(pos)
                     return valid
             except Exception as e:
-                logger.error(f"Error loading position.json: {e}")
+                logger.error(f"Error loading {target_file}: {e}")
         return []
+
+    def _save_positions(self) -> None:
+        data_dir = os.path.join(os.path.dirname(__file__), "data")
+        os.makedirs(data_dir, exist_ok=True)
+        file_name = "paper_position.json" if config.paper_trading else "live_position.json"
+        pos_file = os.path.join(data_dir, file_name)
+        try:
+            for p in self.active_positions:
+                p['is_paper'] = config.paper_trading
+                if 'entry_time' not in p or not p['entry_time']:
+                    p['entry_time'] = time.time()
+            with open(pos_file, 'w', encoding='utf-8') as f:
+                json.dump(self.active_positions, f, indent=2)
+        except Exception as e:
+            logger.error(f"Error saving {file_name}: {e}")
 
     def _sync_wallet_positions(self) -> None:
         """Picks up pre-existing non-USDT wallet holdings (e.g. leftover dust) not yet

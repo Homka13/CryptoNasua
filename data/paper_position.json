@@ -1,0 +1,11 @@
+[
+  {
+    "symbol": "BTC/USDT",
+    "amount": 0.000083477,
+    "entry_price": 64775.20,
+    "highest_price": 64956.00,
+    "is_paper": true,
+    "entry_time": 1785431604.534,
+    "entry_reason": "🟢 RSI OVERSOLD (39.7 <= 40.0) [Blue Chip STABLE] in Bullish Trend"
+  }
+]
