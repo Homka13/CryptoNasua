@@ -368,6 +368,16 @@ class TradingBot:
 
         pnl_pct = ((current_price - entry_price) / entry_price) * 100.0 if entry_price > 0 else 0.0
 
+        # Fetch exact free coin balance from wallet to prevent precision/dust overflow
+        coin = symbol.split('/')[0]
+        try:
+            bal = self.exchange.fetch_balance()
+            free_coin = float(bal.get(coin, {}).get('free', 0.0) or 0.0)
+            if free_coin > 0:
+                amount = free_coin
+        except Exception as b_err:
+            logger.debug(f"Balance check prior to SELL for {symbol}: {b_err}")
+
         logger.info(f"Executing SELL for {symbol} ({amount:.4f} coins @ ${current_price:.6f}). Reason: {reason}")
         try:
             self.exchange.execute_smart_order('sell', amount, current_price, symbol=symbol)
@@ -394,7 +404,6 @@ class TradingBot:
 
         if status == 'EXCHANGE_REJECTED':
             if "Insufficient balance" in error_msg or "170131" in error_msg:
-                coin = symbol.split('/')[0]
                 try:
                     bal = self.exchange.fetch_balance()
                     free_coin = float(bal.get(coin, {}).get('free', 0.0) or 0.0)
@@ -453,7 +462,7 @@ class TradingBot:
                 # Sync any untracked tradable coins in wallet (>= $5.00) into active_positions
                 if not config.paper_trading:
                     try:
-                        self._sync_positions_with_wallet()
+                        self._sync_wallet_positions()
                     except Exception as sync_err:
                         logger.debug(f"Wallet position sync error: {sync_err}")
 
