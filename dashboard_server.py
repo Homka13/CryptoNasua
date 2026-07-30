@@ -163,10 +163,12 @@ class DashboardServer:
         except Exception:
             pass
 
+        active_ex = getattr(config, 'active_exchange', getattr(config, 'exchange_name', 'bybit')).upper()
         payload = {
             'symbol': config.symbol,
             'timeframe': config.timeframe,
-            'mode': 'PAPER TRADING' if config.paper_trading else 'LIVE BYBIT',
+            'active_exchange': active_ex,
+            'mode': 'PAPER TRADING' if config.paper_trading else f'LIVE {active_ex}',
             'paper_trading': config.paper_trading,
             'is_active': self.bot.telegram.is_active,
             'current_price': meta.get('price', 0.0),
@@ -196,7 +198,7 @@ class DashboardServer:
         if not self._verify_session(request):
             return web.json_response({'error': 'Unauthorized'}, status=401)
 
-        orders = getattr(self.bot.exchange.paper, 'closed_orders', []) if (self.bot.exchange and self.bot.exchange.paper) else []
+        orders = getattr(self.bot.exchange, 'closed_orders', []) if self.bot.exchange else []
         verdicts = list(getattr(self.bot, 'ai_verdicts', []))
 
         # Combine orders and AI verdicts sorted by timestamp descending
@@ -260,6 +262,16 @@ class DashboardServer:
                     self.bot._save_position(None)
                     return web.json_response({'success': True, 'message': 'Position closed successfully'})
                 return web.json_response({'success': False, 'error': 'No active position to close'}, status=400)
+            elif action == 'set_exchange':
+                ex_name = body.get('exchange', 'bybit').lower()
+                if ex_name in ('bybit', 'binance'):
+                    config.active_exchange = ex_name
+                    config.exchange_name = ex_name
+                    from exchanges.exchange_factory import ExchangeFactory
+                    self.bot.exchange = ExchangeFactory.create_adapter()
+                    logger.info(f"🌐 Active Exchange Switched via Web Dashboard UI to: {ex_name.upper()}")
+                    return web.json_response({'success': True, 'exchange': ex_name})
+                return web.json_response({'success': False, 'error': 'Invalid exchange choice'}, status=400)
             elif action == 'set_execution_mode':
                 mode = body.get('mode', 'paper')
                 config.paper_trading = (mode.lower() == 'paper')

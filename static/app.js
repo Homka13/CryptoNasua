@@ -305,6 +305,11 @@ function initApp() {
                 }
             }
 
+            const exSelect = document.getElementById('exchange-select');
+            if (exSelect && data.active_exchange) {
+                exSelect.value = data.active_exchange.toLowerCase();
+            }
+
             const symbolSelect = document.getElementById('symbol-select');
             if (symbolSelect && data.symbol) {
                 symbolSelect.value = data.symbol;
@@ -533,6 +538,16 @@ function initApp() {
             method: 'POST',
             headers: { 'Authorization': `Bearer ${authToken}`, 'Content-Type': 'application/json' },
             body: JSON.stringify({ action: 'set_llm_provider', provider })
+        });
+        fetchStatus();
+    });
+
+    document.getElementById('exchange-select')?.addEventListener('change', async (e) => {
+        const exchange = e.target.value;
+        await fetch('/api/control', {
+            method: 'POST',
+            headers: { 'Authorization': `Bearer ${authToken}`, 'Content-Type': 'application/json' },
+            body: JSON.stringify({ action: 'set_exchange', exchange })
         });
         fetchStatus();
     });

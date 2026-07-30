@@ -7,8 +7,13 @@ load_dotenv()
 @dataclass
 class TradingConfig:
     # Exchange & Authentication
-    bybit_api_key: str = os.getenv("BYBIT_API_KEY", "")
-    bybit_api_secret: str = os.getenv("BYBIT_API_SECRET", "")
+    exchange_name: str = os.getenv("EXCHANGE", "bybit").lower()  # 'bybit' or 'binance'
+    active_exchange: str = os.getenv("EXCHANGE", "bybit").lower()
+    bybit_api_key: str = os.getenv("BYBIT_API_KEY", os.getenv("EXCHANGE_API_KEY", ""))
+    bybit_api_secret: str = os.getenv("BYBIT_API_SECRET", os.getenv("EXCHANGE_API_SECRET", ""))
+    binance_api_key: str = os.getenv("BINANCE_API_KEY", "")
+    binance_api_secret: str = os.getenv("BINANCE_API_SECRET", "")
+    binance_testnet: bool = os.getenv("BINANCE_TESTNET", "false").lower() == "true"
     bybit_private_key_path: str = os.getenv("BYBIT_API_PRIVATE_KEY_PATH", "")
     testnet: bool = os.getenv("TESTNET", "false").lower() == "true"
     paper_trading: bool = os.getenv("PAPER_TRADING", "true").lower() == "true"
@@ -62,6 +67,8 @@ class TradingConfig:
     min_order_usdt: float = 2.5  # Bybit minimum spot order value is ~2.0 to 2.5 USDT
 
     # Risk Management
+    max_trade_pct: float = 0.45   # 45% compound trade allocation
+    max_daily_drawdown: float = 0.10 # Max daily drawdown
     stop_loss_pct: float = 0.02   # 2.0% Stop Loss
     take_profit_pct: float = 0.035 # 3.5% Take Profit
     max_daily_loss_pct: float = 0.10 # Stop trading if 10% lost in 24h

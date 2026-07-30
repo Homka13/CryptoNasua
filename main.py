@@ -32,9 +32,10 @@ if sys.platform == "win32":
     sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8', errors='replace', write_through=True)
     sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8', errors='replace', write_through=True)
 
-from exchange_service import ExchangeService
-from strategy import HybridStrategy
-from risk_manager import RiskManager
+from exchanges.exchange_factory import ExchangeFactory
+from core.strategy import HybridStrategy
+from core.risk_manager import RiskManager
+from core.llm_analyst import LLMAnalyst
 from telegram_bot import TelegramInterface
 
 logging.basicConfig(
@@ -50,12 +51,13 @@ from collections import deque
 import time
 
 class TradingBot:
-    """Main Orchestrator for the Bybit Crypto Trading Bot ($10 starting budget)."""
+    """Main Orchestrator for the Multi-Exchange Crypto Trading Bot ($10 starting budget)."""
 
     def __init__(self):
-        self.exchange = ExchangeService()
+        self.exchange = ExchangeFactory.create_adapter()
         self.strategy = HybridStrategy()
         self.risk_manager = RiskManager()
+        self.llm_analyst = LLMAnalyst()
         self.current_position: Optional[Dict[str, Any]] = self._load_position()
         self.latest_meta: Dict[str, Any] = {}
         self.rejected_cooldowns: Dict[str, float] = {}  # Symbol -> expiry timestamp
@@ -64,10 +66,6 @@ class TradingBot:
         
         # Trading active flag
         self.trading_active = True
-
-        # Initialize LLM Analyst filter
-        from llm_analyst import LLMAnalyst
-        self.llm_analyst = LLMAnalyst()
         
         # Initialize Telegram
         self.telegram = TelegramInterface(
@@ -215,7 +213,7 @@ class TradingBot:
                             pnl_pct = ((curr_p - entry_p) / entry_p) * 100
 
                             logger.info(f"Executing SELL for {sym} ({amount:.4f} coins @ ${curr_p:.2f}). Reason: {reason}")
-                            await self.exchange.execute_smart_order('sell', amount, curr_p)
+                            self.exchange.execute_smart_order('sell', amount, curr_p)
                             
                             await self.telegram.send_alert(
                                 f"🔴 *SELL ORDER EXECUTED (Quant Engine)*\n"
@@ -283,7 +281,7 @@ class TradingBot:
                         if is_allowed:
                             try:
                                 logger.info(f"Executing BUY for {target_sym} via Quant Engine: {risk_reason}")
-                                orders = await self.exchange.execute_smart_order('buy', amount, target_meta['price'])
+                                orders = self.exchange.execute_smart_order('buy', amount, target_meta['price'])
                                 
                                 verdict_record['amount'] = amount
                                 self.current_position = {
