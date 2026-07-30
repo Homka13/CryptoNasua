@@ -100,8 +100,8 @@ class TradingConfig:
     market_overheat_rsi_threshold: float = 65.0
     stable_pairs: list = field(default_factory=lambda: ["BTC/USDT", "ETH/USDT", "BNB/USDT", "SOL/USDT", "XRP/USDT"])
     stable_mode_rsi_threshold: float = 40.0
-    stable_mode_tp_pct: float = 0.010  # 1.0% TP for Blue Chips
-    stable_mode_sl_pct: float = 0.015  # 1.5% SL for Blue Chips
+    stable_mode_tp_pct: float = 0.0035  # 0.35% Micro-Scalp TP for Blue Chips (net profit after 0.20% CEX fee)
+    stable_mode_sl_pct: float = 0.010   # 1.0% Tight SL for Blue Chips
 
     # Quant Execution Algorithms (Anti-Slippage & Smart Slicing)
     use_limit_offset: bool = True

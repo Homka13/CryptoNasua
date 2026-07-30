@@ -80,11 +80,12 @@ class HybridStrategy:
             current_position['highest_price'] = highest_price
             peak_gain_pct = (highest_price - entry_price) / entry_price
 
-            tp_threshold = config.stable_mode_tp_pct if is_stable else 0.010
+            tp_threshold = config.stable_mode_tp_pct if is_stable else 0.0050
             if peak_gain_pct >= tp_threshold:
-                trailing_stop_price = highest_price * (0.997 if is_stable else 0.995)
-                if current_price <= trailing_stop_price:
-                    return 'SELL', f'⚡ QUICK SCALPING PROFIT TAKEN (Peak: +{peak_gain_pct*100:.2f}%, Closed: {price_change*100:+.2f}%)', metadata
+                # Lock in net profit immediately if price pulls back micro-step (0.1%) or hits TP
+                trailing_stop_price = highest_price * (0.999 if is_stable else 0.996)
+                if current_price <= trailing_stop_price or price_change >= (tp_threshold * 1.2):
+                    return 'SELL', f'⚡ MICRO-SCALP TAKE-PROFIT (Peak: +{peak_gain_pct*100:.2f}%, Net PnL: {price_change*100:+.2f}%)', metadata
 
             # Hard Take-Profit backup (+10% max blowoff top)
             if price_change >= 0.10:
