@@ -452,16 +452,20 @@ class TradingBot:
         self._save_trade_history()
 
         if status == 'EXCHANGE_REJECTED':
-            if "Insufficient balance" in error_msg or "170131" in error_msg:
+            is_precision_or_balance_error = any(
+                term in error_msg.lower() for term in ['insufficient balance', '170131', 'precision', 'minimum amount', 'less than minimum', 'min_notional']
+            )
+            if is_precision_or_balance_error:
                 try:
                     bal = self.exchange.fetch_balance()
                     free_coin = float(bal.get(coin, {}).get('free', 0.0) or 0.0)
-                    if free_coin * current_price < 5.00:
-                        logger.info(f"🧹 Clearing position {symbol} (Free balance {free_coin} value ${free_coin * current_price:.2f} < $5 min sellable order, cleared)")
+                    coin_val = free_coin * current_price
+                    if coin_val < 5.00:
+                        logger.info(f"🧹 Clearing dust position {symbol} (Free coin value ${coin_val:.4f} < $5 spot order minimum)")
                         self.active_positions = [p for p in self.active_positions if p.get('symbol') != symbol]
                         self.active_position_metas.pop(symbol, None)
                         self._save_positions()
-                        return True, f"Position {symbol} cleared (remaining dust < $5 spot order minimum)"
+                        return True, f"Dust position {symbol} cleared (${coin_val:.4f} < $5.00 CEX minimum)"
                 except Exception as b_check_err:
                     logger.error(f"Error checking balance after sell rejection: {b_check_err}")
 
