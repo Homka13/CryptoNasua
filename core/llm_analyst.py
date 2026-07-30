@@ -168,9 +168,9 @@ Technical Indicators:
 - Market Trend: {meta.get('trend', 'UNKNOWN')}
 
 Rules:
-1. If PnL is positive (>= +0.20%, covering Bybit fees) and RSI is weakening or price is consolidating/stagnant after 5 minutes, recommend SELL to lock in net profit.
-2. If position is open for 5+ minutes and price fails to grow above +0.20% (PnL < +0.20%), recommend SELL to free up capital immediately for hot momentum coins.
-3. If strong bullish momentum continues, recommend HOLD.
+1. On 15m candles, position needs up to 15 minutes (1 full 15m candle) to complete its movement. If age is 5-14 minutes and 15m candle structure is building bullishly, recommend HOLD.
+2. If PnL is positive (>= +0.20%, covering Bybit fees) and RSI is weakening or price is consolidating after 15 minutes, recommend SELL to lock in net profit.
+3. If position is open for 15+ minutes and price fails to grow above +0.20% (PnL < +0.20%), recommend SELL to free up capital immediately for hot momentum coins.
 4. Respond ONLY in valid JSON with format:
 {{"action": "SELL" or "HOLD", "reason": "Short 1-sentence Ukrainian explanation"}}"""
 

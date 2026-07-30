@@ -323,14 +323,14 @@ class TradingBot:
             return (f"🚨 EMERGENCY EXIT: Тренд перевернувся на BEARISH "
                     f"(EMA{config.ema_fast}={ema_fast:.6f} < EMA{config.ema_slow}={ema_slow:.6f}), PnL: {pnl_pct:+.2f}%")
 
-        # 2. 5-Minute Micro-Profit Bank: If after 5 min PnL >= +0.20% (covers fees + net profit), exit immediately!
-        if age_minutes >= 5.0 and pnl_pct >= 0.20:
-            return f"💰 5-MIN MICRO-PROFIT EXIT: Зафіксовано чистий прибуток {pnl_pct:+.2f}% за {age_minutes:.1f} хв (покриває комісію + чистий плюс)!"
+        # 2. 15-Minute Micro-Profit Bank: If after 15 min (1 full 15m candle) PnL >= +0.20%, exit immediately!
+        if age_minutes >= 15.0 and pnl_pct >= 0.20:
+            return f"💰 15-MIN MICRO-PROFIT EXIT: Зафіксовано чистий прибуток {pnl_pct:+.2f}% за {age_minutes:.1f} хв (покриває комісію + чистий плюс)!"
 
-        # 3. 5-Minute Fast Scalping Stagnation Exit: If after 5.0 min price fails to grow to +0.20% — exit immediately!
-        if age_minutes >= 5.0 and pnl_pct < 0.20:
-            return (f"⏰ 5-MIN STAGNATION EXIT: Позиція не виросла вище +0.20% за {age_minutes:.1f} хв "
-                    f"(PnL: {pnl_pct:+.2f}%), миттєво вивільняємо депозит для нових угод.")
+        # 3. 15-Minute Fast Scalping Stagnation Exit: If after 15.0 min (1 full 15m candle) price fails to grow to +0.20% — exit immediately!
+        if age_minutes >= 15.0 and pnl_pct < 0.20:
+            return (f"⏰ 15-MIN STAGNATION EXIT: Позиція не виросла вище +0.20% за 1 повну 15m свічку ({age_minutes:.1f} хв, "
+                    f"PnL: {pnl_pct:+.2f}%), вивільняємо депозит для нових угод.")
 
         # 4. RSI overheated while in profit — bank it before the pullback.
         if rsi > config.health_rsi_overheat and pnl_pct > 0:

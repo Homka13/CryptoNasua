@@ -104,8 +104,17 @@ class HybridStrategy:
             if price_change <= -sl_pct_target:
                 return 'SELL', f'🛑 STOP LOSS TRIGGERED ({price_change*100:.2f}%)', metadata
 
+            # Do not kill Breakout Momentum trades solely because RSI >= 70 during an active pump!
+            is_breakout_trade = bool('BREAKOUT' in str(current_position.get('entry_reason', '')).upper() or current_position.get('is_breakout', False))
+
             if rsi_val >= self.rsi_overbought:
-                return 'SELL', f'⚠️ RSI OVERBOUGHT ({rsi_val:.1f} >= {self.rsi_overbought})', metadata
+                if is_breakout_trade:
+                    # Breakout trades: Only exit if RSI rolls over downward below 68 or Trailing Stop hits!
+                    prev_rsi = float(df_calc.iloc[-2]['rsi'])
+                    if rsi_val < prev_rsi and rsi_val < 68.0 and price_change > 0:
+                        return 'SELL', f'⚠️ BREAKOUT RSI ROLLOVER ({rsi_val:.1f} < {prev_rsi:.1f}), фіксуємо прибуток {price_change*100:+.2f}%', metadata
+                else:
+                    return 'SELL', f'⚠️ RSI OVERBOUGHT ({rsi_val:.1f} >= {self.rsi_overbought})', metadata
 
             return 'HOLD', f'Position active (PnL: {price_change*100:+.2f}%, Peak: +{peak_gain_pct*100:.2f}%)', metadata
 
