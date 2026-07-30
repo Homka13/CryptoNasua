@@ -73,8 +73,10 @@ class TradingBot:
         self.ai_verdicts = deque(maxlen=30)
         self.max_concurrent_positions = 3
 
-        # Trading active flag
+        # Trading active flag and daily trade counter for micro-capital protection
         self.trading_active = True
+        self.daily_trades_count: int = 0
+        self.last_trade_day: str = time.strftime("%Y-%m-%d")
 
         # Initialize Telegram
         self.telegram = TelegramInterface(
@@ -499,10 +501,15 @@ class TradingBot:
             'trend': meta.get('trend', 'UNKNOWN')
         })
 
-        # Strict 20-minute post-sell cooldown for ALL closed trades to prevent ping-pong re-entries
-        effective_cooldown = max(cooldown_minutes, 20)
+        # Feature 1: 45-Minute Symbol Lock for Stagnation, Emergency exits or non-profit exits (< +0.10%)
+        if 'STAGNATION' in reason.upper() or 'EMERGENCY' in reason.upper() or 'TIMEOUT' in reason.upper() or pnl_pct < 0.0010:
+            effective_cooldown = 45  # 45 minutes symbol lock
+            logger.info(f"🔒 {symbol} заблоковано на 45 хв через невдалий/флетовий вихід ({reason}).")
+        else:
+            effective_cooldown = max(cooldown_minutes, 20)  # 20 minutes for normal exits
+            logger.info(f"🔒 {symbol} заблоковано на {effective_cooldown} хв після виходу.")
+
         self.rejected_cooldowns[symbol] = time.time() + (effective_cooldown * 60)
-        logger.info(f"🔒 {symbol} заблоковано на {effective_cooldown} хв після виходу.")
 
         self.active_positions = [p for p in self.active_positions if p.get('symbol') != symbol]
         self.active_position_metas.pop(symbol, None)
@@ -515,6 +522,11 @@ class TradingBot:
             f"• PnL: `{pnl_pct:+.2f}%`\n"
             f"• Reason: {reason}"
         )
+
+        # Feature 2: Global 3-Minute Pause after ANY trade close to let orderbook settle
+        logger.info("💤 Глобальна пауза 3 хвилини після закриття угоди. Аналіз ринку призупинено для стабілізації стакану.")
+        await asyncio.sleep(180)
+
         return True, f"Position {symbol} sold at ${current_price:.6f} (PnL: {pnl_pct:+.2f}%)"
 
     async def run_loop(self):
@@ -746,12 +758,19 @@ class TradingBot:
                             is_deep_loss = (pnl_pct <= -0.015)
                             rsi_substantially_better = (target_rsi < (curr_rsi - 10.0))
 
-                            if (is_stagnant_time or is_deep_loss) and rsi_substantially_better and pnl_pct < 0.0:
-                                should_auto_swap = True
-                                stagnant_info = {'symbol': stagnant_sym, 'amount': pos['amount'], 'price': curr_p, 'age': pos_age_min, 'pnl': pnl_pct}
-                                logger.info(f"🔄 Candidate swap approved: {stagnant_sym} (Age: {pos_age_min:.1f}m, PnL: {pnl_pct*100:+.2f}%, RSI: {curr_rsi:.1f}) → {best_buy_opportunity['symbol']} (RSI: {target_rsi:.1f})")
-                                break
+                # Daily Trade Limit Check (Max 12 trades / day to prevent fee erosion)
+                current_day = time.strftime("%Y-%m-%d")
+                if current_day != self.last_trade_day:
+                    self.last_trade_day = current_day
+                    self.daily_trades_count = 0
 
+                if self.daily_trades_count >= 12:
+                    if not hasattr(self, '_limit_logged_day') or self._limit_logged_day != current_day:
+                        logger.info("🛑 Денний ліміт угод (12/12) вичерпано. Бот переходить у режим очікування до завтра.")
+                        self._limit_logged_day = current_day
+                    best_buy_opportunity = None
+
+                if best_buy_opportunity:
                     target_sym = best_buy_opportunity['symbol']
                     target_meta = best_buy_opportunity['meta']
                     target_reason = best_buy_opportunity['reason']
@@ -895,6 +914,8 @@ class TradingBot:
                         try:
                             logger.info(f"Executing BUY for {target_sym} via Quant Engine: {risk_reason}")
                             orders = self.exchange.execute_smart_order('buy', amount, target_meta['price'], symbol=target_sym)
+                            self.daily_trades_count += 1
+                            logger.info(f"📊 Daily trades count: {self.daily_trades_count}/12")
 
                             verdict_record['amount'] = amount
                             new_pos = {
