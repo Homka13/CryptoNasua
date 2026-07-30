@@ -165,19 +165,23 @@ class TradingBot:
                     await asyncio.sleep(5)
                     continue
 
-                # Determine pairs to scan
-                if self.current_position and 'symbol' in self.current_position:
-                    symbols_to_scan = [self.current_position['symbol']]
-                elif config.symbol == "AUTO" or getattr(config, 'use_dynamic_market_screener', False):
+                # Determine pairs to scan (Always scan top hot pairs to enable live screener feed and Auto-Swap rotation)
+                if config.symbol == "AUTO" or getattr(config, 'use_dynamic_market_screener', False):
                     try:
                         symbols_to_scan = self.exchange.fetch_dynamic_hot_pairs(min_volume=1000000.0, limit=15)
                     except Exception as screener_err:
                         logger.error(f"Dynamic Screener fallback error: {screener_err}")
                         symbols_to_scan = ["SHIB/USDT", "SOL/USDT", "BTC/USDT", "ETH/USDT", "DOGE/USDT", "PEPE/USDT"]
                 elif getattr(config, 'multi_pair_scan', False) and hasattr(config, 'trading_pairs'):
-                    symbols_to_scan = config.trading_pairs
+                    symbols_to_scan = list(config.trading_pairs)
                 else:
                     symbols_to_scan = [config.symbol]
+
+                # Ensure active position symbol is always included in scan list for continuous SL/TP monitoring
+                if self.current_position and 'symbol' in self.current_position:
+                    pos_sym = self.current_position['symbol']
+                    if pos_sym not in symbols_to_scan:
+                        symbols_to_scan.insert(0, pos_sym)
 
                 # Filter out symbols currently in Cooldown after LLM rejection
                 now = time.time()
