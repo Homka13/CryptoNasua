@@ -337,23 +337,48 @@ function initApp() {
             if (posContent) {
                 if (data.active_position) {
                     const pos = data.active_position;
-                    const currPrice = data.latest_price || pos.entry_price;
+                    const currPrice = data.current_price || pos.entry_price;
                     const pnl = ((currPrice - pos.entry_price) / pos.entry_price) * 100;
+                    const pnlUsdt = (currPrice - pos.entry_price) * pos.amount;
                     const pnlClass = pnl >= 0 ? 'text-green' : 'text-red';
+                    
+                    const highestPrice = pos.highest_price || pos.entry_price;
+                    const peakGainPct = Math.max(0, ((highestPrice - pos.entry_price) / pos.entry_price) * 100);
+                    
+                    const entryTimestamp = pos.entry_time ? pos.entry_time * 1000 : (pos.timestamp || Date.now());
+                    const holdMin = Math.max(0, (Date.now() - entryTimestamp) / (1000 * 60));
+
+                    const rsiVal = data.rsi ? data.rsi.toFixed(1) : 'N/A';
+                    const rsiColor = data.rsi <= 30 ? '#48bb78' : (data.rsi >= 70 ? '#f56565' : '#63b3ed');
+                    const trendColor = data.trend === 'BULLISH' ? '#48bb78' : (data.trend === 'BEARISH' ? '#f56565' : '#a0aec0');
+
                     posContent.innerHTML = `
-                        <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px;">
+                        <div style="display: flex; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; gap: 16px;">
                             <div>
-                                <div style="font-size: 1.1rem; margin-bottom: 4px;">
+                                <div style="font-size: 1.15rem; font-weight: 700; margin-bottom: 4px;">
                                     <strong>${pos.symbol}</strong> — ${pos.amount.toFixed(4)} монет
                                 </div>
-                                <div style="font-size: 0.85rem; color: #a0aec0;">
-                                    Ціна входу: $${pos.entry_price.toFixed(4)}
+                                <div style="display: flex; gap: 16px; font-size: 0.88rem; color: #a0aec0; flex-wrap: wrap; margin-bottom: 6px;">
+                                    <span>Ціна входу: <strong>$${pos.entry_price < 0.01 ? pos.entry_price.toFixed(8) : pos.entry_price.toFixed(4)}</strong></span>
+                                    <span>Поточна ціна: <strong>$${currPrice < 0.01 ? currPrice.toFixed(8) : currPrice.toFixed(4)}</strong></span>
+                                    <span>Час в утримуванні: <strong>${holdMin.toFixed(1)} хв</strong></span>
                                 </div>
-                                <div class="${pnlClass}" style="font-size: 1.2rem; font-weight: 700; margin-top: 4px;">
-                                    PnL: ${pnl >= 0 ? '+' : ''}${pnl.toFixed(2)}%
+                                <div style="display: flex; gap: 12px; align-items: center; flex-wrap: wrap; margin-bottom: 8px;">
+                                    <span class="${pnlClass}" style="font-size: 1.25rem; font-weight: 800;">
+                                        PnL: ${pnl >= 0 ? '+' : ''}${pnl.toFixed(2)}% (${pnlUsdt >= 0 ? '+' : ''}$${pnlUsdt.toFixed(4)} USDT)
+                                    </span>
+                                    <span class="badge" style="background: rgba(99, 179, 237, 0.15); color: #63b3ed; border: 1px solid rgba(99, 179, 237, 0.3); font-size: 0.85rem; padding: 4px 8px;">
+                                        📈 Пік прибутку: +${peakGainPct.toFixed(2)}%
+                                    </span>
+                                </div>
+                                <div style="font-size: 0.83rem; background: rgba(255,255,255,0.03); padding: 6px 12px; border-radius: 6px; border: 1px solid rgba(255,255,255,0.06); display: flex; gap: 14px; flex-wrap: wrap; color: #cbd5e0;">
+                                    <span>🔎 <strong>Текучий стан:</strong></span>
+                                    <span>RSI: <strong style="color: ${rsiColor}">${rsiVal}</strong></span>
+                                    <span>Тренд: <strong style="color: ${trendColor}">${data.trend || 'UNKNOWN'}</strong></span>
+                                    <span>EMA20/50: <strong>$${data.ema_fast ? (data.ema_fast < 0.01 ? data.ema_fast.toFixed(8) : data.ema_fast.toFixed(4)) : '-'} / $${data.ema_slow ? (data.ema_slow < 0.01 ? data.ema_slow.toFixed(8) : data.ema_slow.toFixed(4)) : '-'}</strong></span>
                                 </div>
                             </div>
-                            <button id="close-position-btn" class="btn btn-sm btn-danger" style="font-weight: bold; padding: 8px 16px;">
+                            <button id="close-position-btn" class="btn btn-sm btn-danger" style="font-weight: bold; padding: 10px 18px; border-radius: 6px; margin-top: 4px;">
                                 🔴 Закрити Позицію
                             </button>
                         </div>
