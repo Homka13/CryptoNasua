@@ -251,16 +251,24 @@ class TradingBot:
         if entry_price <= 0 or current_price <= 0:
             return None
 
-        # Grace period: never flip-flop inside the first couple of minutes, otherwise
-        # intra-candle noise alone can open and immediately close a position.
         age_minutes = (time.time() - float(position.get('entry_time', time.time()))) / 60.0
-        if age_minutes < config.health_min_hold_minutes:
-            return None
-
         pnl_pct = ((current_price - entry_price) / entry_price) * 100.0
         ema_fast = float(meta.get('ema_fast', 0) or 0)
         ema_slow = float(meta.get('ema_slow', 0) or 0)
         rsi = float(meta.get('rsi', 50) or 50)
+
+        # ⚡ FAST MATH / BREAKOUT SNIPER SPECIAL GUARDIAN:
+        # If position was opened on a 0ms Math Breakout pump, it MUST explode into profit immediately.
+        # If after 1.5 minutes (90s) it hasn't gained +0.20% or is in negative PnL, exit IMMEDIATELY!
+        is_breakout_entry = bool(position.get('is_breakout') or '0ms Math' in position.get('entry_reason', '') or 'BREAKOUT' in position.get('entry_reason', ''))
+        if is_breakout_entry:
+            if age_minutes >= 1.5 and pnl_pct < 0.20:
+                return (f"⚡ FAST MATH BREAKOUT TIMEOUT: Імпульс не вистрілив за {age_minutes:.1f} хв "
+                        f"(PnL: {pnl_pct:+.2f}% < +0.20%), миттєвий вихід для захисту капіталу.")
+
+        # Grace period for standard dip-buy entries
+        if age_minutes < config.health_min_hold_minutes:
+            return None
 
         # 1. Trend flipped bearish — the reason we entered no longer holds.
         if ema_fast > 0 and ema_slow > 0 and ema_fast < ema_slow:
@@ -277,7 +285,7 @@ class TradingBot:
             return (f"⏰ TIMEOUT EXIT: Позиція зависла {age_minutes / 60.0:.1f} год "
                     f"без руху (PnL: {pnl_pct:+.2f}%)")
 
-        # 3. RSI overheated while in profit — bank it before the pullback.
+        # 4. RSI overheated while in profit — bank it before the pullback.
         if rsi > config.health_rsi_overheat and pnl_pct > 0:
             return f"💰 PROFIT PROTECTION: RSI перегрітий ({rsi:.1f}), фіксуємо прибуток {pnl_pct:+.2f}%"
 
@@ -754,7 +762,9 @@ class TradingBot:
                                 'entry_price': target_meta['price'],
                                 'amount': amount,
                                 'entry_time': time.time(),
-                                'order_id': orders[0].get('id') if orders else 'N/A'
+                                'order_id': orders[0].get('id') if orders else 'N/A',
+                                'is_breakout': bool('0ms Math' in target_reason or 'BREAKOUT' in target_reason),
+                                'entry_reason': target_reason
                             }
                             self.active_positions.append(new_pos)
                             self._save_positions()
