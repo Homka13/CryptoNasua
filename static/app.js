@@ -504,6 +504,38 @@ function initApp() {
         fetchStatus();
     });
 
+    document.getElementById('btn-resume')?.addEventListener('click', async () => {
+        await fetch('/api/control', {
+            method: 'POST',
+            headers: { 'Authorization': `Bearer ${getAuthToken()}`, 'Content-Type': 'application/json' },
+            body: JSON.stringify({ action: 'resume' })
+        });
+        fetchStatus();
+    });
+
+    document.getElementById('btn-pause')?.addEventListener('click', async () => {
+        await fetch('/api/control', {
+            method: 'POST',
+            headers: { 'Authorization': `Bearer ${getAuthToken()}`, 'Content-Type': 'application/json' },
+            body: JSON.stringify({ action: 'pause' })
+        });
+        fetchStatus();
+    });
+
+    document.getElementById('toggle-execution-mode-btn')?.addEventListener('click', async () => {
+        const btn = document.getElementById('toggle-execution-mode-btn');
+        const isPaperNow = btn ? btn.innerText.includes('Демо') : true;
+        const confirmMsg = isPaperNow ? "⚠️ УВАГА: Ви вмикаєте РЕАЛЬНУ торгівлю на CEX! Продовжити?" : "Перемкнути назад у режим Демо-Торгівлі ($10 Paper)?";
+        if (confirm(confirmMsg)) {
+            await fetch('/api/control', {
+                method: 'POST',
+                headers: { 'Authorization': `Bearer ${getAuthToken()}`, 'Content-Type': 'application/json' },
+                body: JSON.stringify({ action: 'set_execution_mode', mode: isPaperNow ? 'live' : 'paper' })
+            });
+            fetchStatus();
+        }
+    });
+
     document.getElementById('btn-exec-paper')?.addEventListener('click', async () => {
         await fetch('/api/control', {
             method: 'POST',

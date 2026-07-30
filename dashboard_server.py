@@ -144,11 +144,15 @@ class DashboardServer:
         if not self._verify_session(request):
             return web.json_response({'error': 'Unauthorized'}, status=401)
 
+        meta = getattr(self.bot, 'latest_meta', {}) or {}
         now = time.time()
         if not hasattr(self, '_cached_bal_time') or (now - getattr(self, '_cached_bal_time', 0) > 10.0):
             try:
                 self._cached_bal = self.bot.exchange.fetch_balance()
-                self._cached_real_bal = self.bot.exchange.fetch_real_balance()
+                if hasattr(self.bot.exchange, 'fetch_real_balance'):
+                    self._cached_real_bal = self.bot.exchange.fetch_real_balance()
+                else:
+                    self._cached_real_bal = {}
                 self._cached_bal_time = now
             except Exception as e:
                 logger.error(f"Error fetching balance for dashboard: {e}")
