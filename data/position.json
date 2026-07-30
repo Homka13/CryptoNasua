@@ -1,7 +1,7 @@
 {
-  "symbol": "WLD/USDT",
-  "entry_price": 0.306,
-  "amount": 4.5,
-  "order_id": "1001",
-  "is_paper": true
+  "symbol": "WLFI/USDT",
+  "entry_price": 0.05588,
+  "amount": 2.701743993,
+  "order_id": "2270367928061096192",
+  "is_paper": false
 }

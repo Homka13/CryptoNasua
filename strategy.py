@@ -67,7 +67,12 @@ class HybridStrategy:
             current_position['highest_price'] = highest_price
             peak_gain_pct = (highest_price - entry_price) / entry_price
 
-            # If gain reached activation threshold (+2.5%), enable Dynamic Trailing Stop
+            # --- ⚡ QUICK SCALPER TAKE-PROFIT (+1.0% to +1.85% STALL EXIT) ---
+            # If price reaches +1.0%+ and stalls or pulls back slightly (1-2 updates), lock in the profit!
+            if peak_gain_pct >= 0.010 and current_price <= (highest_price * 0.996):
+                return 'SELL', f'⚡ QUICK SCALPER TAKE-PROFIT (Peak: +{peak_gain_pct*100:.2f}%, Closed: {price_change*100:+.2f}%)', metadata
+
+            # Trailing Stop for bigger pumps (+2.5%+)
             if peak_gain_pct >= 0.025:
                 trailing_stop_price = highest_price * 0.985  # Trailing 1.5% below peak
                 if current_price <= trailing_stop_price:

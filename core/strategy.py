@@ -60,22 +60,22 @@ class HybridStrategy:
             entry_price = current_position['entry_price']
             price_change = (current_price - entry_price) / entry_price
 
-            # --- MODULE 1: DYNAMIC TRAILING STOP-LOSS & PROFIT RUNNER ---
+            # --- ⚡ MODULE 1: QUICK SCALPING TRAILING STOP (+1.0% ACTIVATION) ---
             highest_price = max(current_position.get('highest_price', entry_price), current_price)
             current_position['highest_price'] = highest_price
             peak_gain_pct = (highest_price - entry_price) / entry_price
 
-            # If gain reached activation threshold (+2.5%), enable Dynamic Trailing Stop
-            if peak_gain_pct >= 0.025:
-                trailing_stop_price = highest_price * 0.985  # Trailing 1.5% below peak
+            # Activate Scalping Trailing Stop when peak gain reaches +1.0% (trailing 0.5% below peak)
+            if peak_gain_pct >= 0.010:
+                trailing_stop_price = highest_price * 0.995  # Trailing 0.5% below peak
                 if current_price <= trailing_stop_price:
-                    return 'SELL', f'🎯 DYNAMIC TRAILING STOP EXITED (Peak: +{peak_gain_pct*100:.2f}%, Closed: {price_change*100:+.2f}%)', metadata
+                    return 'SELL', f'⚡ QUICK SCALPING PROFIT TAKEN (Peak: +{peak_gain_pct*100:.2f}%, Closed: {price_change*100:+.2f}%)', metadata
 
-            # Hard Take-Profit backup (+15% max blowoff top)
-            if price_change >= 0.15:
+            # Hard Take-Profit backup (+10% max blowoff top)
+            if price_change >= 0.10:
                 return 'SELL', f'🚀 MAX BLOWOFF TAKE PROFIT (+{price_change*100:.2f}%)', metadata
 
-            # Hard Stop-Loss protection (-2.5%)
+            # Hard Stop-Loss protection (-2.0%)
             if price_change <= -config.stop_loss_pct:
                 return 'SELL', f'🛑 STOP LOSS TRIGGERED ({price_change*100:.2f}%)', metadata
 

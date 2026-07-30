@@ -239,87 +239,124 @@ class TradingBot:
                     except Exception as scan_err:
                         logger.error(f"Error scanning {sym}: {scan_err}")
 
-                # Process Best Buy Opportunity found across scanned symbols
-                if best_buy_opportunity and self.current_position is None:
-                    target_sym = best_buy_opportunity['symbol']
-                    target_meta = best_buy_opportunity['meta']
-                    target_reason = best_buy_opportunity['reason']
+                # Process Best Buy Opportunity / Auto-Swap Position Rotation
+                should_auto_swap = False
+                stagnant_info = None
 
-                    is_confirmed, llm_reason = await self.llm_analyst.evaluate_trade_signal(
-                        target_sym, config.timeframe, target_meta, target_reason
-                    )
+                if best_buy_opportunity:
+                    if self.current_position is not None:
+                        pos = self.current_position
+                        stagnant_sym = pos.get('symbol')
+                        if stagnant_sym != best_buy_opportunity['symbol']:
+                            entry_p = pos.get('entry_price', 1.0)
+                            entry_t = pos.get('entry_time', now)
+                            pos_age_min = (now - entry_t) / 60.0
+                            curr_p = self.latest_meta.get('price', entry_p) if self.latest_meta.get('symbol') == stagnant_sym else entry_p
+                            pnl_pct = ((curr_p - entry_p) / entry_p)
+                            
+                            # Stagnation rule: Position held > 10 min with PnL stuck in [-1.0%, +1.0%] range
+                            if pos_age_min >= 10.0 and (-0.010 <= pnl_pct <= 0.010):
+                                should_auto_swap = True
+                                stagnant_info = {'symbol': stagnant_sym, 'amount': pos['amount'], 'price': curr_p, 'age': pos_age_min, 'pnl': pnl_pct}
+                                logger.info(f"🔄 Stagnant position detected on {stagnant_sym} (Age: {pos_age_min:.1f}m, PnL: {pnl_pct*100:+.2f}%). Evaluating Auto-Swap into hot candidate {best_buy_opportunity['symbol']}...")
 
-                    # Record AI Verdict into History Deque for Dashboard UI
-                    verdict_record = {
-                        'timestamp': int(time.time() * 1000),
-                        'time': time.strftime("%H:%M:%S"),
-                        'symbol': target_sym,
-                        'side': 'buy' if is_confirmed else 'reject',
-                        'price': target_meta.get('price', 0.0),
-                        'amount': 0.0,
-                        'status': 'CONFIRMED' if is_confirmed else 'REJECTED',
-                        'reason': llm_reason,
-                        'provider': config.llm_provider.upper()
-                    }
-                    self.ai_verdicts.appendleft(verdict_record)
+                    if self.current_position is None or should_auto_swap:
+                        target_sym = best_buy_opportunity['symbol']
+                        target_meta = best_buy_opportunity['meta']
+                        target_reason = best_buy_opportunity['reason']
 
-                    # Add prominent entry into live scan logs feed
-                    ai_icon = "🟢 DEEPSEEK CONFIRMED" if is_confirmed else "🛑 DEEPSEEK REJECTED"
-                    self.scan_logs.appendleft({
-                        'time': time.strftime("%H:%M:%S"),
-                        'symbol': target_sym,
-                        'price': target_meta.get('price', 0.0),
-                        'signal': 'BUY' if is_confirmed else 'REJECTED',
-                        'reason': f"🤖 {ai_icon}: {llm_reason}",
-                        'rsi': target_meta.get('rsi', 0.0),
-                        'trend': target_meta.get('trend', 'UNKNOWN')
-                    })
-
-                    if not is_confirmed:
-                        # Activate 15-minute cooldown for rejected pair to prevent spam and focus on other pairs
-                        self.rejected_cooldowns[target_sym] = time.time() + (15 * 60)
-                        logger.warning(f"🛑 BUY signal for {target_sym} rejected by LLM Analyst (15m Cooldown activated): {llm_reason}")
-                        await self.telegram.send_alert(f"⚠️ *BUY Signal REJECTED by LLM ({target_sym})* [15m Cooldown Activated]: {llm_reason}")
-                    else:
-                        bal = self.exchange.fetch_balance()
-                        usdt_free = bal.get('USDT', {}).get('free', 0.0)
-                        
-                        is_allowed, amount, risk_reason = self.risk_manager.calculate_position_size(
-                            usdt_free, target_meta['price']
+                        is_confirmed, llm_reason = await self.llm_analyst.evaluate_trade_signal(
+                            target_sym, config.timeframe, target_meta, target_reason
                         )
 
-                        if is_allowed:
-                            try:
-                                logger.info(f"Executing BUY for {target_sym} via Quant Engine: {risk_reason}")
-                                orders = self.exchange.execute_smart_order('buy', amount, target_meta['price'], symbol=target_sym)
-                                
-                                verdict_record['amount'] = amount
-                                self.current_position = {
-                                    'symbol': target_sym,
-                                    'entry_price': target_meta['price'],
-                                    'amount': amount,
-                                    'order_id': orders[0].get('id') if orders else 'N/A'
-                                }
-                                self._save_position(self.current_position)
-                                
-                                await self.telegram.send_alert(
-                                    f"🟢 *BUY ORDER EXECUTED (Quant Engine)*\n"
-                                    f"• Pair: `{target_sym}`\n"
-                                    f"• Price: `${target_meta['price']:.2f}`\n"
-                                    f"• Amount: `{amount:.4f}`\n"
-                                    f"• Execution: `Limit Offset + Iceberg ({config.iceberg_slices} slices)`\n"
-                                    f"• Strategy Reason: {target_reason}\n"
-                                    f"• {llm_reason}"
-                                )
-                            except Exception as order_err:
-                                verdict_record['status'] = 'EXCHANGE_REJECTED'
-                                verdict_record['reason'] += f" | ⚠️ Bybit Error: {order_err}"
-                                logger.error(f"Bybit Order Execution Error for {target_sym}: {order_err}")
-                                await self.telegram.send_alert(f"⚠️ *Bybit Order Rejected*: {order_err}")
+                        # Record AI Verdict into History Deque for Dashboard UI
+                        verdict_record = {
+                            'timestamp': int(time.time() * 1000),
+                            'time': time.strftime("%H:%M:%S"),
+                            'symbol': target_sym,
+                            'side': 'buy' if is_confirmed else 'reject',
+                            'price': target_meta.get('price', 0.0),
+                            'amount': 0.0,
+                            'status': 'CONFIRMED' if is_confirmed else 'REJECTED',
+                            'reason': llm_reason,
+                            'provider': config.llm_provider.upper()
+                        }
+                        self.ai_verdicts.appendleft(verdict_record)
+
+                        # Add prominent entry into live scan logs feed
+                        ai_icon = "🟢 DEEPSEEK CONFIRMED" if is_confirmed else "🛑 DEEPSEEK REJECTED"
+                        self.scan_logs.appendleft({
+                            'time': time.strftime("%H:%M:%S"),
+                            'symbol': target_sym,
+                            'price': target_meta.get('price', 0.0),
+                            'signal': 'BUY' if is_confirmed else 'REJECTED',
+                            'reason': f"🤖 {ai_icon}: {llm_reason}",
+                            'rsi': target_meta.get('rsi', 0.0),
+                            'trend': target_meta.get('trend', 'UNKNOWN')
+                        })
+
+                        if not is_confirmed:
+                            # Activate 15-minute cooldown for rejected pair to prevent spam and focus on other pairs
+                            self.rejected_cooldowns[target_sym] = time.time() + (15 * 60)
+                            logger.warning(f"🛑 BUY signal for {target_sym} rejected by LLM Analyst (15m Cooldown activated): {llm_reason}")
+                            await self.telegram.send_alert(f"⚠️ *BUY Signal REJECTED by LLM ({target_sym})* [15m Cooldown Activated]: {llm_reason}")
                         else:
-                            verdict_record['status'] = 'RISK_REJECTED'
-                            verdict_record['reason'] += f" | ⚠️ RiskManager: {risk_reason}"
-                            logger.warning(f"BUY rejected by RiskManager for {target_sym}: {risk_reason}")
+                            # Execute Auto-Swap exit of stagnant position if needed
+                            if should_auto_swap and stagnant_info:
+                                logger.info(f"🔄 Executing AUTO-SWAP exit for stagnant position {stagnant_info['symbol']}...")
+                                try:
+                                    self.exchange.execute_smart_order('sell', stagnant_info['amount'], stagnant_info['price'], symbol=stagnant_info['symbol'])
+                                    await self.telegram.send_alert(
+                                        f"🔄 *AUTO-SWAP POSITION ROTATION EXECUTED*\n"
+                                        f"• Closed Stagnant Pair: `{stagnant_info['symbol']}`\n"
+                                        f"• Stagnation Hold Time: `{stagnant_info['age']:.0f} min` (PnL: `{stagnant_info['pnl']*100:+.2f}%`)\n"
+                                        f"• Reason: Swapping capital into hot momentum coin `{target_sym}`!"
+                                    )
+                                    self.current_position = None
+                                    self._save_position(None)
+                                except Exception as swap_sell_err:
+                                    logger.error(f"Auto-Swap sell error for {stagnant_info['symbol']}: {swap_sell_err}")
+
+                            bal = self.exchange.fetch_balance()
+                            usdt_free = bal.get('USDT', {}).get('free', 0.0)
+                            
+                            is_allowed, amount, risk_reason = self.risk_manager.calculate_position_size(
+                                usdt_free, target_meta['price']
+                            )
+
+                            if is_allowed:
+                                try:
+                                    logger.info(f"Executing BUY for {target_sym} via Quant Engine: {risk_reason}")
+                                    orders = self.exchange.execute_smart_order('buy', amount, target_meta['price'], symbol=target_sym)
+                                    
+                                    verdict_record['amount'] = amount
+                                    self.current_position = {
+                                        'symbol': target_sym,
+                                        'entry_price': target_meta['price'],
+                                        'amount': amount,
+                                        'entry_time': time.time(),
+                                        'order_id': orders[0].get('id') if orders else 'N/A'
+                                    }
+                                    self._save_position(self.current_position)
+                                    
+                                    await self.telegram.send_alert(
+                                        f"🟢 *BUY ORDER EXECUTED (Quant Engine)*\n"
+                                        f"• Pair: `{target_sym}`\n"
+                                        f"• Price: `${target_meta['price']:.2f}`\n"
+                                        f"• Amount: `{amount:.4f}`\n"
+                                        f"• Execution: `Limit Offset + Iceberg ({config.iceberg_slices} slices)`\n"
+                                        f"• Strategy Reason: {target_reason}\n"
+                                        f"• {llm_reason}"
+                                    )
+                                except Exception as order_err:
+                                    verdict_record['status'] = 'EXCHANGE_REJECTED'
+                                    verdict_record['reason'] += f" | ⚠️ Bybit Error: {order_err}"
+                                    logger.error(f"Bybit Order Execution Error for {target_sym}: {order_err}")
+                                    await self.telegram.send_alert(f"⚠️ *Bybit Order Rejected*: {order_err}")
+                            else:
+                                verdict_record['status'] = 'RISK_REJECTED'
+                                verdict_record['reason'] += f" | ⚠️ RiskManager: {risk_reason}"
+                                logger.warning(f"BUY rejected by RiskManager for {target_sym}: {risk_reason}")
 
             except Exception as e:
                 logger.error(f"Error in bot loop: {e}")
