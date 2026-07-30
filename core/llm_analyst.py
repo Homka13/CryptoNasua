@@ -11,12 +11,10 @@ from config import config
 logger = logging.getLogger(__name__)
 
 class LLMAnalyst:
-    """Evaluates buy signals using DeepSeek V4/V3, Gemini 1.5, or OpenAI GPT-4o-mini."""
+    """Evaluates buy signals using DeepSeek V4/V3, Gemini 1.5, OpenRouter, or OpenAI GPT-4o-mini."""
     
     def __init__(self):
-        self.api_key = config.deepseek_api_key or config.llm_api_key or os.getenv("DEEPSEEK_API_KEY", "")
-        self.provider = config.llm_provider
-        self.api_url = "https://api.deepseek.com/v1/chat/completions" if self.provider == "deepseek" else "https://api.openai.com/v1/chat/completions"
+        pass
 
     async def evaluate_trade_signal(self, symbol: str, timeframe: str, meta: Dict[str, Any], strategy_reason: str) -> Tuple[bool, str]:
         """
@@ -26,9 +24,22 @@ class LLMAnalyst:
         if not config.use_llm_confirmation:
             return True, "LLM Confirmation disabled in config"
 
-        key = config.deepseek_api_key or config.llm_api_key or os.getenv("DEEPSEEK_API_KEY", "")
+        key = (config.deepseek_api_key or config.llm_api_key or os.getenv("DEEPSEEK_API_KEY", "") or os.getenv("LLM_API_KEY", "")).strip()
         if not key or key == "your_deepseek_api_key_here":
             return True, "No LLM API key configured (Bypassed filter)"
+
+        provider = getattr(config, 'llm_provider', 'deepseek').lower()
+        
+        # Determine API Endpoint and Model dynamically
+        if key.startswith("sk-or-v1-"):
+            api_url = "https://openrouter.ai/api/v1/chat/completions"
+            model = "deepseek/deepseek-chat"
+        elif provider == "openai" or (key.startswith("sk-proj-") or key.startswith("sk-admin-")):
+            api_url = "https://api.openai.com/v1/chat/completions"
+            model = "gpt-4o-mini"
+        else:
+            api_url = "https://api.deepseek.com/chat/completions"
+            model = getattr(config, 'deepseek_model', 'deepseek-chat')
 
         prompt = f"""You are an expert quantitative crypto trader & risk manager.
 Analyze the following technical setup for pair: {symbol} on {timeframe} timeframe:
@@ -46,50 +57,72 @@ Rules:
 3. Respond ONLY in valid JSON with format:
 {{"verdict": "CONFIRM" or "REJECT", "confidence": 0-100, "reason": "Short 1-sentence Ukrainian explanation"}}"""
 
-        try:
-            headers = {
-                "Authorization": f"Bearer {key}",
-                "Content-Type": "application/json"
-            }
-            body = {
-                "model": "deepseek-chat" if config.llm_provider == "deepseek" else "gpt-4o-mini",
-                "messages": [
-                    {"role": "system", "content": "You are a disciplined crypto risk sentinel. Respond strictly in valid JSON."},
-                    {"role": "user", "content": prompt}
-                ],
-                "temperature": 0.2
-            }
+        # Try primary endpoint, with fallback to OpenAI / OpenRouter if 401 occurs
+        endpoints_to_try = [
+            (api_url, model),
+            ("https://api.openai.com/v1/chat/completions", "gpt-4o-mini"),
+            ("https://openrouter.ai/api/v1/chat/completions", "deepseek/deepseek-chat")
+        ]
+        # Remove duplicates while preserving order
+        unique_endpoints = []
+        for ep in endpoints_to_try:
+            if ep not in unique_endpoints:
+                unique_endpoints.append(ep)
 
-            loop = asyncio.get_event_loop()
-            req = urllib.request.Request(self.api_url, data=json.dumps(body).encode('utf-8'), headers=headers)
-            
-            def _fetch():
-                with urllib.request.urlopen(req, timeout=12) as response:
-                    return json.loads(response.read().decode('utf-8'))
+        last_error = None
+        for current_url, current_model in unique_endpoints:
+            try:
+                headers = {
+                    "Authorization": f"Bearer {key}",
+                    "Content-Type": "application/json"
+                }
+                if "openrouter.ai" in current_url:
+                    headers["HTTP-Referer"] = "https://crypto-trading-bot.local"
+                    headers["X-Title"] = "Crypto Trading Bot"
 
-            res = await loop.run_in_executor(None, _fetch)
-            content = res['choices'][0]['message']['content'].strip()
-            
-            # Clean markdown codeblocks if present
-            if content.startswith("```json"):
-                content = content[7:]
-            if content.endswith("```"):
-                content = content[:-3]
-            content = content.strip()
+                body = {
+                    "model": current_model,
+                    "messages": [
+                        {"role": "system", "content": "You are a disciplined crypto risk sentinel. Respond strictly in valid JSON."},
+                        {"role": "user", "content": prompt}
+                    ],
+                    "temperature": 0.2
+                }
 
-            data = json.loads(content)
-            verdict = data.get("verdict", "REJECT").upper()
-            confidence = float(data.get("confidence", 0))
-            reason = data.get("reason", "No reason provided")
+                loop = asyncio.get_event_loop()
+                req = urllib.request.Request(current_url, data=json.dumps(body).encode('utf-8'), headers=headers)
+                
+                def _fetch():
+                    with urllib.request.urlopen(req, timeout=12) as response:
+                        return json.loads(response.read().decode('utf-8'))
 
-            min_req = config.min_llm_confidence
-            if verdict == "CONFIRM" and confidence >= min_req:
-                logger.info(f"✅ LLM Verdict: CONFIRM [{config.trading_mode_display}] ({confidence}%) - {reason}")
-                return True, f"LLM Verdict: CONFIRM [{config.trading_mode_display}] (Confidence: {confidence:.0f}%, Min Req: {min_req}%) - {reason}"
-            else:
-                logger.warning(f"🛑 LLM Verdict: REJECT [{config.trading_mode_display}] ({confidence}%) - {reason}")
-                return False, f"LLM Verdict: REJECT [{config.trading_mode_display}] (Confidence: {confidence:.0f}%, Min Req: {min_req}%) - {reason}"
+                res = await loop.run_in_executor(None, _fetch)
+                content = res['choices'][0]['message']['content'].strip()
+                
+                # Clean markdown codeblocks if present
+                if content.startswith("```json"):
+                    content = content[7:]
+                if content.endswith("```"):
+                    content = content[:-3]
+                content = content.strip()
 
-        except Exception as e:
-            logger.error(f"Error evaluating trade signal via LLM Analyst: {e}")
-            return True, f"LLM Analyst API Error (Fallback to Quant Signal): {e}"
+                data = json.loads(content)
+                verdict = data.get("verdict", "REJECT").upper()
+                confidence = float(data.get("confidence", 0))
+                reason = data.get("reason", "No reason provided")
+
+                min_req = config.min_llm_confidence
+                provider_label = "DeepSeek" if "deepseek" in current_url else ("OpenAI" if "openai" in current_url else "OpenRouter")
+                if verdict == "CONFIRM" and confidence >= min_req:
+                    logger.info(f"✅ LLM Verdict ({provider_label}): CONFIRM [{config.trading_mode_display}] ({confidence}%) - {reason}")
+                    return True, f"LLM Verdict ({provider_label}): CONFIRM [{config.trading_mode_display}] (Confidence: {confidence:.0f}%, Min Req: {min_req}%) - {reason}"
+                else:
+                    logger.warning(f"🛑 LLM Verdict ({provider_label}): REJECT [{config.trading_mode_display}] ({confidence}%) - {reason}")
+                    return False, f"LLM Verdict ({provider_label}): REJECT [{config.trading_mode_display}] (Confidence: {confidence:.0f}%, Min Req: {min_req}%) - {reason}"
+
+            except Exception as e:
+                last_error = e
+                logger.warning(f"Endpoint {current_url} failed: {e}. Trying fallback if available...")
+
+        logger.error(f"Error evaluating trade signal via LLM Analyst: {last_error}")
+        return True, f"LLM Analyst API Key Invalid ({last_error}). Please check your API key in Web Dashboard."
