@@ -251,7 +251,8 @@ class DashboardServer:
             'active_position': active_pos_payload,
             'wallet_holdings': wallet_holdings,
             'max_concurrent_positions': getattr(self.bot, 'max_concurrent_positions', 3),
-            'scan_logs': list(getattr(self.bot, 'scan_logs', []))
+            'scan_logs': list(getattr(self.bot, 'scan_logs', [])),
+            'ai_verdicts': list(getattr(self.bot, 'ai_verdicts', []))
         }
         return web.json_response(payload)
 

@@ -435,23 +435,65 @@ function initApp() {
                     const sigColor = log.signal === 'BUY' ? '#10b981' : (log.signal === 'REJECTED' ? '#f43f5e' : (log.signal === 'SELL' ? '#f43f5e' : '#8896b4'));
                     const priceFormatted = log.price < 0.01 ? log.price.toFixed(8) : log.price.toFixed(4);
 
-                    let bgStyle = 'border-bottom: 1px solid rgba(255,255,255,0.04); padding-bottom: 4px;';
+                    let bgStyle = 'border-bottom: 1px solid rgba(255,255,255,0.04); padding: 4px 6px; border-radius: 4px;';
                     if (isTradeExec) {
                         bgStyle = `background: ${log.signal === 'BUY' ? 'rgba(16,185,129,0.10)' : 'rgba(244,63,94,0.10)'}; border-left: 3px solid ${log.signal === 'BUY' ? '#10b981' : '#f43f5e'}; padding: 4px 8px; border-radius: 4px;`;
                     } else if (isAiLog) {
                         bgStyle = 'background: rgba(139, 92, 246, 0.12); border-left: 3px solid #8b5cf6; padding: 4px 8px; border-radius: 4px;';
                     }
-                    return `<div style="display:flex;gap:8px;margin-bottom:3px;align-items:center;flex-wrap:wrap;${bgStyle}">
-                        <span style="color:#5c6a82;font-size:0.78rem;">[${log.time}]</span>
+                    return `<div style="display:flex;gap:6px;margin-bottom:3px;align-items:center;flex-wrap:wrap;${bgStyle}">
+                        <span style="color:#5c6a82;font-size:0.75rem;">[${log.time}]</span>
                         <span style="color:#93bbfd;font-weight:700;">${log.symbol} ($${priceFormatted})</span>
                         <span>| <strong style="color:${sigColor};">${log.signal}</strong></span>
                         <span style="color:#8896b4;flex:1;">| ${log.reason}</span>
                     </div>`;
                 }).join('');
             }
+
+            // Render AI Verdicts Panel (DeepSeek Audit)
+            renderAiVerdicts(data.ai_verdicts || []);
         } catch (err) {
             console.error("Status polling error:", err);
         }
+    }
+
+    function renderAiVerdicts(verdicts) {
+        const listContainer = document.getElementById('trade-actions-list');
+        const aiCount = document.getElementById('ai-verdicts-count');
+        if (!listContainer) return;
+
+        if (aiCount) aiCount.innerText = `${(verdicts || []).length} 🤖`;
+
+        if (!verdicts || verdicts.length === 0) {
+            listContainer.innerHTML = '<div class="empty-positions" style="margin:0;border:none;">Очікування перших вердиктів ШІ (DeepSeek)...</div>';
+            return;
+        }
+
+        listContainer.innerHTML = verdicts.map(v => {
+            const isConfirmed = v.status === 'CONFIRMED';
+            const badgeClass = isConfirmed ? 'buy' : 'sell';
+            const statusColor = isConfirmed ? '#10b981' : '#f43f5e';
+            const bgStyle = isConfirmed 
+                ? 'background: rgba(16,185,129,0.08); border-left: 3px solid #10b981;' 
+                : 'background: rgba(244,63,94,0.08); border-left: 3px solid #f43f5e;';
+
+            return `
+            <div style="padding: 8px 12px; border-radius: 8px; margin-bottom: 6px; font-size: 0.83rem; ${bgStyle}">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
+                    <div style="display: flex; align-items: center; gap: 8px;">
+                        <span style="color: #a0aec0; font-size: 0.76rem; font-family: monospace;">[${v.time || '—'}]</span>
+                        <strong style="color: #93bbfd; font-size: 0.9rem;">🤖 ${v.symbol}</strong>
+                        <span class="trade-action-badge ${badgeClass}">${v.status}</span>
+                    </div>
+                    <span style="font-size: 0.76rem; color: ${statusColor}; font-weight: bold;">
+                        Довіра: ${v.confidence || 90}%
+                    </span>
+                </div>
+                <div style="color: #cbd5e0; font-size: 0.8rem; line-height: 1.4;">
+                    💡 ${v.reason || 'Аналіз завершено.'}
+                </div>
+            </div>`;
+        }).join('');
     }
 
     // ===== MULTI-POSITION RENDERING =====

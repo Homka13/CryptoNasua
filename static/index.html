@@ -125,56 +125,93 @@
             </div>
         </section>
 
-        <!-- Full Wallet Breakdown (incl. dust below sellable minimum) -->
-        <section id="wallet-holdings-section" class="glass-card section-card hidden" style="margin-bottom: 20px;">
-            <div class="chart-header">
-                <h3 style="margin:0;">💰 Гаманець (усі монети) <span id="wallet-holdings-count-badge" class="badge badge-paper" style="font-size:0.7rem;">0</span></h3>
-                <button id="convert-dust-btn" class="btn btn-sm btn-outline" title="Конвертувати залишки, які неможливо продати ордером, у USDT">
-                    ♻️ Конвертувати пил у USDT
-                </button>
-            </div>
-            <div id="wallet-holdings-container"></div>
-            <div id="convert-dust-result" class="hidden" style="margin-top:12px;"></div>
-        </section>
-
-        <!-- Dedicated Trade History Card (Interactive Scrollable Table) -->
-        <section class="glass-card section-card" style="margin-bottom: 24px;">
-            <div class="chart-header" style="margin-bottom: 14px;">
-                <h3 style="margin: 0; display: flex; align-items: center; gap: 8px;">
-                    📜 Історія Закритих Угод
-                    <span id="history-total-count-badge" class="badge badge-paper" style="font-size:0.75rem;">0 угод</span>
-                </h3>
-                <div style="display: flex; gap: 12px; align-items: center;">
-                    <div style="font-size:0.85rem; color:var(--text-secondary);">
-                        Сумарний PnL: <strong id="history-total-pnl" style="color:var(--accent-green); font-family:monospace; font-size:0.95rem;">+0.00%</strong>
-                    </div>
-                    <button id="download-csv-btn-card" class="btn btn-xs btn-outline" style="font-size:0.75rem; padding:4px 10px;" title="Завантажити повну історію угод у CSV (Excel)">
-                        📥 Експорт CSV
-                    </button>
+        <!-- DUAL PARALLEL FIXED-HEIGHT PANELS GRID (LIVE SCANNER + AI SENTINEL VERDICTS) -->
+        <section class="dual-panel-grid" style="margin-bottom: 24px;">
+            <!-- Panel 1: Live Screener Stream -->
+            <div class="glass-card panel-card-fixed">
+                <div class="panel-header">
+                    <h3 style="margin: 0; font-size: 1.05rem; display: flex; align-items: center; gap: 8px;">
+                        📡 Сканування Ринку <span style="color: #48bb78; font-size: 0.8rem; font-weight: bold; animation: pulse 1.5s infinite;">● LIVE</span>
+                    </h3>
+                    <span id="scan-last-time" style="font-size: 0.75rem; color: #a0aec0;">Оновлення...</span>
+                </div>
+                <div id="scan-log-console" style="height: 320px; overflow-y: auto; font-family: monospace; font-size: 0.8rem;">
+                    <div style="color: #718096; padding: 12px;">Очікування перших результатів сканування...</div>
                 </div>
             </div>
 
-            <div class="table-wrapper-scrollable" style="max-height: 380px; overflow-y: auto; border: 1px solid rgba(255,255,255,0.08); border-radius: 8px;">
-                <table style="width: 100%; border-collapse: collapse; text-align: left; font-size: 0.83rem;">
-                    <thead style="position: sticky; top: 0; background: #1a202c; z-index: 10; border-bottom: 1px solid rgba(255,255,255,0.12);">
-                        <tr style="color: var(--text-muted); font-size: 0.76rem; text-transform: uppercase;">
-                            <th style="padding: 10px 12px; min-width:70px;">Час</th>
-                            <th style="padding: 10px 12px; min-width:90px;">Монета</th>
-                            <th style="padding: 10px 12px; min-width:65px;">Тип</th>
-                            <th style="padding: 10px 12px; min-width:90px;">Обсяг</th>
-                            <th style="padding: 10px 12px; min-width:140px;">Ціна (Вхід → Вихід)</th>
-                            <th style="padding: 10px 12px; min-width:100px;">PnL (%)</th>
-                            <th style="padding: 10px 12px;">Причина Закриття</th>
-                        </tr>
-                    </thead>
-                    <tbody id="history-table-body">
-                        <tr>
-                            <td colspan="7" class="empty-positions" style="text-align:center; padding: 24px; color: var(--text-muted);">
-                                Очікування перших закритих угод...
-                            </td>
-                        </tr>
-                    </tbody>
-                </table>
+            <!-- Panel 2: AI Sentinel Verdicts (DeepSeek Audit) -->
+            <div class="glass-card panel-card-fixed">
+                <div class="panel-header">
+                    <h3 style="margin: 0; font-size: 1.05rem; display: flex; align-items: center; gap: 8px;">
+                        🤖 Аналіз та Вердикти ШІ <span style="color: #a78bfa; font-size: 0.8rem; font-weight: bold;">(DeepSeek Audit)</span>
+                    </h3>
+                    <div style="display:flex;gap:8px;align-items:center;">
+                        <span id="ai-verdicts-count" class="badge" style="font-size:0.7rem;background:rgba(139,92,246,0.15);color:#a78bfa;border:1px solid rgba(139,92,246,0.3);">0 🤖</span>
+                    </div>
+                </div>
+                <div class="table-wrapper-scrollable" id="trade-actions-wrapper" style="height: 320px; overflow-y: auto; padding: 8px;">
+                    <div id="trade-actions-list">
+                        <div class="empty-positions" style="margin:0;border:none;">Очікування перших вердиктів ШІ...</div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- BOTTOM DUAL GRID: WALLET BREAKDOWN (LEFT) + CLOSED TRADE HISTORY (RIGHT) -->
+        <section class="dual-panel-grid" style="margin-bottom: 24px;">
+            <!-- Left Side: Wallet Breakdown & Dust Conversion -->
+            <div class="glass-card section-card" style="margin-bottom: 0;">
+                <div class="chart-header" style="margin-bottom: 12px;">
+                    <h3 style="margin:0; font-size: 1.05rem; display: flex; align-items: center; gap: 8px;">
+                        💰 Гаманець (усі монети) <span id="wallet-holdings-count-badge" class="badge badge-paper" style="font-size:0.7rem;">0</span>
+                    </h3>
+                    <button id="convert-dust-btn" class="btn btn-xs btn-outline" style="font-size:0.75rem; padding:4px 8px;" title="Конвертувати залишки у USDT">
+                        ♻️ Пил у USDT
+                    </button>
+                </div>
+                <div id="wallet-holdings-container" style="max-height: 320px; overflow-y: auto;"></div>
+                <div id="convert-dust-result" class="hidden" style="margin-top:12px;"></div>
+            </div>
+
+            <!-- Right Side: Dedicated Trade History Card (Interactive Scrollable Table) -->
+            <div class="glass-card section-card" style="margin-bottom: 0;">
+                <div class="chart-header" style="margin-bottom: 14px;">
+                    <h3 style="margin: 0; font-size: 1.05rem; display: flex; align-items: center; gap: 8px;">
+                        📜 Історія Закритих Угод
+                        <span id="history-total-count-badge" class="badge badge-paper" style="font-size:0.75rem;">0 угод</span>
+                    </h3>
+                    <div style="display: flex; gap: 12px; align-items: center;">
+                        <div style="font-size:0.85rem; color:var(--text-secondary);">
+                            PnL: <strong id="history-total-pnl" style="color:var(--accent-green); font-family:monospace; font-size:0.95rem;">+0.00%</strong>
+                        </div>
+                        <button id="download-csv-btn-card" class="btn btn-xs btn-outline" style="font-size:0.75rem; padding:4px 8px;" title="Експорт у CSV">
+                            📥 CSV
+                        </button>
+                    </div>
+                </div>
+
+                <div class="table-wrapper-scrollable" style="max-height: 320px; overflow-y: auto; border: 1px solid rgba(255,255,255,0.08); border-radius: 8px;">
+                    <table style="width: 100%; border-collapse: collapse; text-align: left; font-size: 0.82rem;">
+                        <thead style="position: sticky; top: 0; background: #1a202c; z-index: 10; border-bottom: 1px solid rgba(255,255,255,0.12);">
+                            <tr style="color: var(--text-muted); font-size: 0.74rem; text-transform: uppercase;">
+                                <th style="padding: 8px 10px; min-width:65px;">Час</th>
+                                <th style="padding: 8px 10px; min-width:80px;">Монета</th>
+                                <th style="padding: 8px 10px; min-width:55px;">Тип</th>
+                                <th style="padding: 8px 10px; min-width:110px;">Ціна</th>
+                                <th style="padding: 8px 10px; min-width:80px;">PnL (%)</th>
+                                <th style="padding: 8px 10px;">Причина</th>
+                            </tr>
+                        </thead>
+                        <tbody id="history-table-body">
+                            <tr>
+                                <td colspan="6" class="empty-positions" style="text-align:center; padding: 20px; color: var(--text-muted);">
+                                    Очікування перших закритих угод...
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
             </div>
         </section>
 
@@ -253,43 +290,6 @@
             </div>
         </section>
 
-        <!-- DUAL PARALLEL FIXED-HEIGHT PANELS GRID -->
-        <section class="dual-panel-grid" style="margin-bottom: 24px;">
-            <!-- Panel 1: Live Screener Stream -->
-            <div class="glass-card panel-card-fixed">
-                <div class="panel-header">
-                    <h3 style="margin: 0; font-size: 1.05rem; display: flex; align-items: center; gap: 8px;">
-                        📡 Сканування Ринку <span style="color: #48bb78; font-size: 0.8rem; font-weight: bold; animation: pulse 1.5s infinite;">● LIVE</span>
-                    </h3>
-                    <span id="scan-last-time" style="font-size: 0.75rem; color: #a0aec0;">Оновлення...</span>
-                </div>
-                <div id="scan-log-console">
-                    <div style="color: #718096;">Очікування перших результатів сканування...</div>
-                </div>
-            </div>
-
-            <!-- Panel 2: Trade Actions (Buy/Sell) + AI Verdicts -->
-            <div class="glass-card panel-card-fixed">
-                <div class="panel-header">
-                    <h3 style="margin: 0; font-size: 1.05rem; display: flex; align-items: center; gap: 8px;">
-                        📜 Торгові Дії (Buy / Sell)
-                    </h3>
-                    <div style="display:flex;gap:8px;align-items:center;">
-                        <button id="download-csv-btn" class="btn btn-xs btn-outline" style="font-size:0.75rem;padding:3px 8px;" title="Завантажити повну історію угод у CSV (Excel)">
-                            📥 CSV
-                        </button>
-                        <span id="trade-actions-count" class="badge" style="font-size:0.7rem;background:rgba(16,185,129,0.15);color:#10b981;border:1px solid rgba(16,185,129,0.3);">0</span>
-                        <span id="ai-verdicts-count" class="badge" style="font-size:0.7rem;background:rgba(139,92,246,0.15);color:#a78bfa;border:1px solid rgba(139,92,246,0.3);">0 🤖</span>
-                    </div>
-                </div>
-                <div class="table-wrapper-scrollable" id="trade-actions-wrapper">
-                    <div id="trade-actions-list" style="padding:4px;">
-                        <div class="empty-positions" style="margin:0;border:none;">Очікування перших торгових дій...</div>
-                    </div>
-                </div>
-            </div>
-        </section>
-
         <!-- Stable Exchange Chart Section (Watchlist Tabs + Stable TradingView) -->
         <section class="glass-card section-card" style="padding: 20px;">
             <div class="chart-header">
@@ -314,6 +314,6 @@
         </section>
     </div>
 
-    <script src="/static/app.js?v=20260730_v33"></script>
+    <script src="/static/app.js?v=20260730_v34"></script>
 </body>
 </html>
