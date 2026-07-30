@@ -436,20 +436,21 @@ class TradingBot:
             error_msg = str(order_err)
             logger.error(f"SELL order rejected for {symbol}: {order_err}")
 
-        self.trade_actions.appendleft({
-            'timestamp': int(time.time() * 1000),
-            'time': time.strftime("%H:%M:%S"),
-            'symbol': symbol,
-            'side': 'SELL',
-            'amount': amount,
-            'price': current_price,
-            'entry_price': entry_price,
-            'pnl_pct': round(pnl_pct, 2),
-            'pnl_usdt': round((current_price - entry_price) * amount, 4),
-            'reason': reason if not error_msg else f"{reason} | ⚠️ {error_msg}",
-            'status': status
-        })
-        self._save_trade_history()
+        if status == 'FILLED':
+            self.trade_actions.appendleft({
+                'timestamp': int(time.time() * 1000),
+                'time': time.strftime("%H:%M:%S"),
+                'symbol': symbol,
+                'side': 'SELL',
+                'amount': amount,
+                'price': current_price,
+                'entry_price': entry_price,
+                'pnl_pct': round(pnl_pct, 2),
+                'pnl_usdt': round((current_price - entry_price) * amount, 4),
+                'reason': reason,
+                'status': 'FILLED'
+            })
+            self._save_trade_history()
 
         if status == 'EXCHANGE_REJECTED':
             is_precision_or_balance_error = any(

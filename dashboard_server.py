@@ -284,7 +284,8 @@ class DashboardServer:
         if not self._verify_session(request):
             return web.json_response({'error': 'Unauthorized'}, status=401)
 
-        trade_actions = list(getattr(self.bot, 'trade_actions', []))
+        raw_actions = list(getattr(self.bot, 'trade_actions', []))
+        trade_actions = [t for t in raw_actions if t.get('status') == 'FILLED']
         return web.json_response({
             'success': True,
             'total_trades': len(trade_actions),
@@ -296,7 +297,8 @@ class DashboardServer:
         if not self._verify_session(request):
             return web.json_response({'error': 'Unauthorized'}, status=401)
 
-        trade_actions = list(getattr(self.bot, 'trade_actions', []))
+        raw_actions = list(getattr(self.bot, 'trade_actions', []))
+        trade_actions = [t for t in raw_actions if t.get('status') == 'FILLED']
         csv_lines = ["Time,Symbol,Side,Amount,Price,EntryPrice,PnL_Pct,PnL_USDT,Status,Reason\n"]
         for t in trade_actions:
             line = f"{t.get('time','')},{t.get('symbol','')},{t.get('side','')},{t.get('amount',0)},{t.get('price',0)},{t.get('entry_price',0)},{t.get('pnl_pct',0)},{t.get('pnl_usdt',0)},{t.get('status','')},\"{t.get('reason','')}\"\n"

@@ -1,0 +1,27 @@
+[
+  {
+    "timestamp": 1785415584019,
+    "time": "15:46:24",
+    "symbol": "NEAR/USDT",
+    "side": "SELL",
+    "amount": 3.333988,
+    "price": 1.646,
+    "entry_price": 1.646,
+    "pnl_pct": 0.0,
+    "pnl_usdt": 0.0,
+    "reason": "⚡ FAST MATH BREAKOUT TIMEOUT: Імпульс не вистрілив за 1.7 хв, миттєвий вихід для захисту капіталу.",
+    "status": "FILLED"
+  },
+  {
+    "timestamp": 1785415479968,
+    "time": "15:44:39",
+    "symbol": "NEAR/USDT",
+    "side": "BUY",
+    "amount": 3.341433778857837,
+    "price": 1.646,
+    "pnl_pct": null,
+    "pnl_usdt": null,
+    "reason": "⚡ BREAKOUT MOMENTUM PUMP SNIPER (Пробой 24h макс $1.6720, Об'єм x2.4) [0ms Math]",
+    "status": "FILLED"
+  }
+]
