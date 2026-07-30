@@ -267,7 +267,12 @@ class TradingBot:
             return (f"🚨 EMERGENCY EXIT: Тренд перевернувся на BEARISH "
                     f"(EMA{config.ema_fast}={ema_fast:.6f} < EMA{config.ema_slow}={ema_slow:.6f}), PnL: {pnl_pct:+.2f}%")
 
-        # 2. Position went nowhere for hours — free up the capital.
+        # 2. Scalping Stagnation Exit: Position went nowhere for 12+ minutes with PnL < +0.15% — free up capital.
+        if age_minutes >= 12.0 and pnl_pct < 0.15:
+            return (f"⏰ STAGNATION EXIT: Позиція зависла у боковику {age_minutes:.1f} хв "
+                    f"без руху (PnL: {pnl_pct:+.2f}% < +0.15%), вивільняємо депозит для нових угод.")
+
+        # 3. Position went nowhere for hours — free up the capital.
         if age_minutes / 60.0 > config.health_stale_hours and abs(pnl_pct) < config.health_stale_pnl_pct:
             return (f"⏰ TIMEOUT EXIT: Позиція зависла {age_minutes / 60.0:.1f} год "
                     f"без руху (PnL: {pnl_pct:+.2f}%)")
@@ -519,11 +524,7 @@ class TradingBot:
                         if signal == 'BUY' and not pos_for_sym and getattr(config, 'monitor_only', False):
                             suppressed_buys.append(sym)
 
-                        can_open_new = (
-                            len(self.active_positions) < self.max_concurrent_positions
-                            and not getattr(config, 'monitor_only', False)
-                        )
-                        if signal == 'BUY' and can_open_new and not pos_for_sym:
+                        if signal == 'BUY' and not pos_for_sym and not getattr(config, 'monitor_only', False):
                             if best_buy_opportunity is None or meta.get('rsi', 100) < best_buy_opportunity['meta'].get('rsi', 100):
                                 best_buy_opportunity = {'symbol': sym, 'meta': meta, 'reason': reason}
                         elif signal == 'SELL' and pos_for_sym:
