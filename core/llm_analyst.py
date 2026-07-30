@@ -137,11 +137,12 @@ Strict Rules:
         logger.error(f"Error evaluating trade signal via LLM Analyst: {last_error}")
         return True, f"LLM Analyst API Key Invalid ({last_error}). Please check your API key in Web Dashboard."
 
-    async def evaluate_active_position_health(self, symbol: str, timeframe: str, meta: Dict[str, Any], age_minutes: float, pnl_pct: float) -> Tuple[bool, str]:
+    async def evaluate_active_position_health(self, symbol: str, timeframe: str, meta: Dict[str, Any], age_minutes: float, pnl_pct: float, entry_reason: str = 'DIP_REVERSAL') -> Tuple[bool, str]:
         """
-        Active Position Guardian: Called when position age >= 5.0 minutes.
-        Asks DeepSeek LLM whether to SELL to bank micro-profit/exit stagnation or KEEP HOLDING.
-        Returns (should_close: bool, reason: str)
+        Active Position Guardian: Evaluates position health with physics-based timing and momentum tracking.
+        - Dip Reversals need 25 minutes.
+        - Breakouts need 10 minutes.
+        - If price is creeping UP (PnL > 0.0%), DeepSeek MUST RECOMMEND HOLD to let it reach Take Profit!
         """
         if not config.use_llm_confirmation:
             return False, "LLM active monitoring disabled"
@@ -161,8 +162,15 @@ Strict Rules:
             api_url = "https://api.deepseek.com/chat/completions"
             model = getattr(config, 'deepseek_model', 'deepseek-chat')
 
-        prompt = f"""You are an active crypto position guardian.
-The position for {symbol} has been open for {age_minutes:.1f} minutes with current PnL: {pnl_pct:+.2f}%.
+        is_dip = any(k in entry_reason.upper() for k in ["DIP", "REVERSAL", "OVERSOLD", "LOVETS"])
+        module_name = "Ловець відскоків (Dip Reversal)" if is_dip else "Снайпер Пампів (Breakout)"
+        max_allowed_stagnation_min = 25.0 if is_dip else 10.0
+
+        prompt = f"""You are an active crypto position guardian for {symbol}.
+Module Strategy: {module_name} (Entry Reason: {entry_reason})
+Hold Time: {age_minutes:.1f} minutes. Maximum Stagnation Lifetime for this module: {max_allowed_stagnation_min:.0f} minutes.
+Current PnL: {pnl_pct:+.2f}%.
+
 Technical Indicators:
 - Current Price: ${meta.get('price', 0):.4f}
 - RSI (14): {meta.get('rsi', 0):.1f}
@@ -170,10 +178,13 @@ Technical Indicators:
 - EMA 50: ${meta.get('ema_slow', 0):.4f}
 - Market Trend: {meta.get('trend', 'UNKNOWN')}
 
-Rules:
-1. On 15m candles, position needs up to 15 minutes (1 full 15m candle) to complete its movement. If age is 5-14 minutes and 15m candle structure is building bullishly, recommend HOLD.
-2. If PnL is positive (>= +0.20%, covering Bybit fees) and RSI is weakening or price is consolidating after 15 minutes, recommend SELL to lock in net profit.
-3. If position is open for 15+ minutes and price fails to grow above +0.20% (PnL < +0.20%), recommend SELL to free up capital immediately for hot momentum coins.
+STRICT GUARDIAN RULES:
+1. GREEN CANDLE / BULLISH MOMENTUM GUARD: If current PnL is POSITIVE (PnL > 0.0%) and price is crawling/creeping UP (bullish candles building), YOU MUST RECOMMEND HOLD! NEVER cut a trade that is in profit and moving up before its Take Profit target is hit.
+2. DYNAMIC TIMING RULES:
+   - For {module_name}, the trade needs up to {max_allowed_stagnation_min:.0f} minutes to fully develop.
+   - If hold time is less than {max_allowed_stagnation_min:.0f} minutes and PnL >= 0.0%, ALWAYS RECOMMEND HOLD.
+3. EXIT ONLY ON FAKEOUT / DUMP:
+   - Only recommend SELL if hold time EXCEEDS {max_allowed_stagnation_min:.0f} minutes AND PnL is NEGATIVE or FLAT (PnL < 0.0%) with RSI dropping below 40.
 4. Respond ONLY in valid JSON with format:
 {{"action": "SELL" or "HOLD", "reason": "Short 1-sentence Ukrainian explanation"}}"""
 

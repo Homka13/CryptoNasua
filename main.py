@@ -679,8 +679,9 @@ class TradingBot:
                                 curr_p = float(meta.get('price', 0) or entry_p)
                                 pnl = ((curr_p - entry_p) / entry_p * 100.0) if entry_p > 0 else 0.0
                                 if age_m >= 5.0:
+                                    entry_reason_str = str(pos_for_sym.get('reason') or pos_for_sym.get('entry_reason') or 'DIP_REVERSAL')
                                     should_llm_exit, llm_health_msg = await self.llm_analyst.evaluate_active_position_health(
-                                        sym, config.timeframe, meta, age_m, pnl
+                                        sym, config.timeframe, meta, age_m, pnl, entry_reason=entry_reason_str
                                     )
                                     if should_llm_exit:
                                         health_reason = llm_health_msg
