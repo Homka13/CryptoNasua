@@ -125,14 +125,14 @@ class TradingBot:
             return
 
         tracked_symbols = {p.get('symbol') for p in self.active_positions}
-        ignore_coins = {'USDT', 'USDC', 'USD'}
+        ignore_keys = {'USDT', 'USDC', 'USD', 'INFO', 'FREE', 'USED', 'TOTAL', 'DATETIME', 'TIMESTAMP'}
         min_sellable_usdt = 5.0  # Bybit/Binance spot MIN_NOTIONAL floor
 
         for coin, info in balance.items():
-            if not isinstance(info, dict) or coin.upper() in ignore_coins:
+            if not isinstance(info, dict) or coin.upper() in ignore_keys:
                 continue
-            free_amount = float(info.get('free', 0) or 0)
-            if free_amount <= 0:
+            total_amount = float(info.get('total', 0) or info.get('free', 0) or 0)
+            if total_amount <= 0:
                 continue
             symbol = f"{coin}/USDT"
             if symbol in tracked_symbols:
@@ -144,9 +144,25 @@ class TradingBot:
                 continue
             if price <= 0:
                 continue
-            value_usdt = free_amount * price
+            value_usdt = total_amount * price
             if value_usdt < min_sellable_usdt:
                 continue
+
+            # Auto-cancel any old open limit order on Bybit to release locked balance
+            if hasattr(self.exchange, 'cancel_all_orders'):
+                try:
+                    self.exchange.cancel_all_orders(symbol)
+                except Exception as c_err:
+                    logger.debug(f"Auto-cancel on sync for {symbol}: {c_err}")
+
+            # Re-fetch free amount after cancelling open orders
+            free_amount = total_amount
+            try:
+                refetched = self.exchange.fetch_balance()
+                free_amount = float(refetched.get(coin, {}).get('free', total_amount) or total_amount)
+            except Exception:
+                pass
+
             self.active_positions.append({
                 'symbol': symbol,
                 'amount': free_amount,
@@ -457,6 +473,24 @@ class TradingBot:
 
         import time
         self.last_heartbeat = time.time()
+
+        # Force cancel all resting open orders on any coins to unlock locked balance on CEX
+        if not config.paper_trading:
+            try:
+                bal = self.exchange.fetch_balance()
+                for coin, info in bal.items():
+                    if isinstance(info, dict) and coin.upper() not in {'USDT', 'USDC', 'USD', 'INFO', 'FREE', 'USED', 'TOTAL', 'DATETIME', 'TIMESTAMP'}:
+                        used_qty = float(info.get('used', 0) or 0)
+                        if used_qty > 0:
+                            sym = f"{coin}/USDT"
+                            logger.info(f"🔓 Cancelling resting open orders on Bybit for {sym} to unlock {used_qty} coins...")
+                            try:
+                                self.exchange.exchange.cancel_all_orders(sym)
+                            except Exception as c_err:
+                                logger.warning(f"Could not cancel open orders for {sym}: {c_err}")
+            except Exception as b_err:
+                logger.warning(f"Unlock balance check error: {b_err}")
+
         while True:
             try:
                 # Sync any untracked tradable coins in wallet (>= $5.00) into active_positions

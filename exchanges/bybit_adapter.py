@@ -126,6 +126,12 @@ class BybitExchangeAdapter(BaseExchangeAdapter):
             # Apply exchange price and amount precision formatting
             formatted_amount = float(self.exchange.amount_to_precision(symbol, amount))
             if side == 'sell':
+                # Automatically cancel any open resting limit orders to release locked coins
+                try:
+                    self.exchange.cancel_all_orders(symbol)
+                except Exception as c_err:
+                    logger.debug(f"Auto-cancel open orders prior to SELL for {symbol}: {c_err}")
+
                 coin = symbol.split('/')[0]
                 try:
                     bal = self.fetch_balance()
@@ -257,6 +263,13 @@ class BybitExchangeAdapter(BaseExchangeAdapter):
             'quote_tx_id': quote_tx_id,
             'info': confirm,
         }
+
+    def cancel_all_orders(self, symbol: str) -> None:
+        """Cancels all active/resting open orders for a given symbol on Bybit."""
+        try:
+            self.exchange.cancel_all_orders(symbol)
+        except Exception as e:
+            logger.warning(f"Could not cancel open orders for {symbol}: {e}")
 
     def fetch_dynamic_hot_pairs(self, min_volume: float = 1000000.0, limit: int = 25) -> List[str]:
         try:
