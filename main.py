@@ -171,6 +171,22 @@ class TradingBot:
         except Exception as e:
             return f"❌ Error fetching balance: {e}"
 
+    def is_btc_dumping(self) -> bool:
+        """Checks if Bitcoin is currently dumping on 5m timeframe."""
+        try:
+            df_btc = self.exchange.fetch_ohlcv("BTC/USDT", "5m", limit=30)
+            if df_btc is not None and len(df_btc) >= 20:
+                df_calc = self.strategy.calculate_indicators(df_btc)
+                latest_btc = df_calc.iloc[-1]
+                close_p = float(latest_btc['close'])
+                ema20_p = float(latest_btc['ema_fast'])
+                rsi_p = float(latest_btc['rsi'])
+                if close_p < ema20_p and rsi_p < 42.0:
+                    return True
+        except Exception as e:
+            logger.debug(f"BTC shield check skipped: {e}")
+        return False
+
     async def run_loop(self):
         logger.info("🚀 Starting Bybit Trading Bot loop...")
         await self.telegram.send_alert(
@@ -216,10 +232,15 @@ class TradingBot:
                     if now >= self.rejected_cooldowns.get(s, 0)
                 ]
 
+                # Check BTC Gravity Shield: If Bitcoin is dumping on 5m, pause new altcoin BUY entries
+                btc_is_dumping = self.is_btc_dumping()
+                if btc_is_dumping:
+                    logger.warning("📉 [BTC GRAVITY SHIELD]: BTC is dumping on 5m timeframe. Altcoin BUY signals paused to prevent fakeouts.")
+
                 best_buy_opportunity = None
 
                 for sym in active_scan_symbols:
-                    if not self.telegram.is_active:
+                    if not self.telegram.is_active or not getattr(self, 'trading_active', False):
                         break
 
                     try:

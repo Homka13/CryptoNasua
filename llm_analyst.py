@@ -20,6 +20,9 @@ class LLMAnalyst:
         provider = config.llm_provider.lower()
         api_key = (config.deepseek_api_key or config.llm_api_key).strip() if provider == "deepseek" else (config.llm_api_key or config.deepseek_api_key).strip()
 
+        if metadata.get('skip_llm', False):
+            return True, "⚡ FAST MATH EXECUTION (LLM bypassed for 0ms breakout speed)"
+
         if not self.enabled or not api_key:
             return True, "LLM filter disabled or API key missing (Defaulting to technical signal)"
 
@@ -33,9 +36,10 @@ Technical Context:
 - RSI (14): {metadata.get('rsi', 0):.2f}
 - Fast EMA (20): ${metadata.get('ema_fast', 0)}
 - Slow EMA (50): ${metadata.get('ema_slow', 0)}
+- Lower Bollinger Band (20,2): ${metadata.get('bb_lower', 0)}
 - Trend Context: {metadata.get('trend', 'UNKNOWN')}
 
-Task: Analyze if this entry carries high risk of a bull-trap or breakdown.
+Task: Analyze if this dip reversal entry carries high risk of a falling knife or breakdown.
 Respond strictly in valid JSON format:
 {{
   "decision": "CONFIRM" or "REJECT",
