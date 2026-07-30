@@ -130,15 +130,14 @@ class HybridStrategy:
         is_bullish_trend = (metadata['trend'] == 'BULLISH')
         is_oversold = rsi_val <= rsi_oversold_target
 
-        # --- MODULE 2: BREAKOUT MOMENTUM PUMP SNIPER (24h High + Volume Surge - 0ms Fast Math Execution) ---
-        high_24h = float(df_calc['high'].tail(96).max()) if len(df_calc) >= 96 else float(df_calc['high'].max())
-        avg_vol_20 = float(df_calc['volume'].tail(20).mean())
-        curr_vol = float(latest['volume'])
-        vol_ratio = curr_vol / (avg_vol_20 + 1e-10)
-
-        if current_price >= (0.98 * high_24h) and vol_ratio >= 2.0 and (55.0 <= rsi_val < 68.0):
-            metadata['skip_llm'] = False  # Mandatory DeepSeek LLM Audit
-            return 'BUY', f'⚡ BREAKOUT MOMENTUM PUMP SNIPER (Пробой 24h макс ${high_24h:.4f}, Об\'єм x{vol_ratio:.1f})', metadata
+        # --- MODULE 2: BREAKOUT MOMENTUM PUMP SNIPER (24h High + Volume Surge - Max RSI 75 Cap) ---
+        if current_price >= (0.98 * high_24h) and vol_ratio >= 2.0:
+            if rsi_val > 75.0:
+                regime_tag = " [STABLE]" if is_stable else ""
+                return 'HOLD', f'Scanning market (Breakout RSI too high: {rsi_val:.1f} > 75.0 - waiting for micro-pullback){regime_tag}', metadata
+            elif 55.0 <= rsi_val <= 75.0:
+                metadata['skip_llm'] = False  # Mandatory DeepSeek LLM Audit
+                return 'BUY', f'⚡ BREAKOUT MOMENTUM PUMP SNIPER (Пробой 24h макс ${high_24h:.4f}, Об\'єм x{vol_ratio:.1f}, RSI: {rsi_val:.1f})', metadata
 
         # Count consecutive red candles at the tail
         consecutive_red = 0

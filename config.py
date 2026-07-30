@@ -69,8 +69,8 @@ class TradingConfig:
     # Risk Management
     max_trade_pct: float = 0.45   # 45% compound trade allocation
     max_daily_drawdown: float = 0.10 # Max daily drawdown
-    stop_loss_pct: float = 0.02   # 2.0% Stop Loss
-    take_profit_pct: float = 0.035 # 3.5% Take Profit
+    stop_loss_pct: float = 0.0050  # 0.50% Tight Stop Loss for Micro-Scalping (1:1 Risk/Reward with +0.5% TP)
+    take_profit_pct: float = 0.0050 # 0.50% Take Profit
     max_daily_loss_pct: float = 0.10 # Stop trading if 10% lost in 24h
 
     # Strategy Parameters (Micro-Grid + RSI / EMA)
