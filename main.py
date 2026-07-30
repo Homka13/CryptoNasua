@@ -481,9 +481,9 @@ class TradingBot:
             'trend': meta.get('trend', 'UNKNOWN')
         })
 
-        if cooldown_minutes > 0:
-            self.rejected_cooldowns[symbol] = time.time() + (cooldown_minutes * 60)
-            logger.info(f"🔒 {symbol} заблоковано на {cooldown_minutes} хв після виходу.")
+        effective_cooldown = cooldown_minutes if cooldown_minutes > 0 else 15
+        self.rejected_cooldowns[symbol] = time.time() + (effective_cooldown * 60)
+        logger.info(f"🔒 {symbol} заблоковано на {effective_cooldown} хв після виходу.")
 
         self.active_positions = [p for p in self.active_positions if p.get('symbol') != symbol]
         self.active_position_metas.pop(symbol, None)

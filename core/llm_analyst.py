@@ -52,12 +52,15 @@ Analyze the following technical setup for pair: {symbol} on {timeframe} timefram
 - EMA 50: ${meta.get('ema_slow', 0):.4f}
 - Lower Bollinger Band (20,2): ${meta.get('bb_lower', 0):.4f}
 - Market Trend: {meta.get('trend', 'UNKNOWN')}
+- Recent 5 Candle Closes: {meta.get('last_5_closes', [])}
+- Micro-Trend 5-Candle Slope: {meta.get('slope_5_candles_pct', 0.0):+.2f}%
+- Last 3 Candles Consecutive RED (Falling): {meta.get('last_3_red', False)}
 - Strategy Signal Reason: {strategy_reason}
 - Trading Mode: {config.trading_mode_display} (Min Confidence Required: {config.min_llm_confidence}%)
 
-Rules:
-1. Reject if price is in a strong downtrend unless RSI is severely oversold (< 25) with clear reversal.
-2. Confirm if RSI oversold in a bullish trend or a strong breakout pattern is forming.
+Strict Rules:
+1. REJECT if the micro-trend is falling (last 3 candles consecutive RED or negative slope) without a green reversal candle. Do NOT buy coins that are slumping/creeping down in a micro-downtrend!
+2. Confirm ONLY if price is rebounding off a strong support level or forming a clear bullish reversal pattern with a green candle.
 3. Respond ONLY in valid JSON with format:
 {{"verdict": "CONFIRM" or "REJECT", "confidence": 0-100, "reason": "Short 1-sentence Ukrainian explanation"}}"""
 

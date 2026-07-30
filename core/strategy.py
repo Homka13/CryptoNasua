@@ -59,6 +59,12 @@ class HybridStrategy:
         rsi_oversold_target = config.stable_mode_rsi_threshold if is_stable else self.rsi_oversold
         sl_pct_target = config.stable_mode_sl_pct if is_stable else config.stop_loss_pct
 
+        last_5 = df_calc.tail(5)
+        last_5_closes = [round(float(c), 4) for c in last_5['close']]
+        price_5_ago = float(last_5['close'].iloc[0])
+        slope_5_candles_pct = ((current_price - price_5_ago) / price_5_ago) * 100.0 if price_5_ago > 0 else 0.0
+        last_3_red = all(float(r['close']) < float(r['open']) for _, r in last_5.tail(3).iterrows())
+
         metadata = {
             'price': current_price,
             'rsi': rsi_val,
@@ -67,7 +73,10 @@ class HybridStrategy:
             'bb_lower': bb_lower_val,
             'bb_upper': bb_upper_val,
             'trend': analyze_trend(ema_fast_val, ema_slow_val),
-            'is_stable': is_stable
+            'is_stable': is_stable,
+            'last_5_closes': last_5_closes,
+            'slope_5_candles_pct': round(slope_5_candles_pct, 2),
+            'last_3_red': last_3_red
         }
 
         # 1. Check active position for Trailing Stop / Take-Profit / Stop-Loss
@@ -110,9 +119,9 @@ class HybridStrategy:
         curr_vol = float(latest['volume'])
         vol_ratio = curr_vol / (avg_vol_20 + 1e-10)
 
-        if current_price >= (0.975 * high_24h) and vol_ratio >= 2.0 and rsi_val >= 55.0:
-            metadata['skip_llm'] = True  # Bypass LLM delay for 0ms breakout execution
-            return 'BUY', f'⚡ BREAKOUT MOMENTUM PUMP SNIPER (Пробой 24h макс ${high_24h:.4f}, Об\'єм x{vol_ratio:.1f}) [0ms Math]', metadata
+        if current_price >= (0.98 * high_24h) and vol_ratio >= 2.0 and (55.0 <= rsi_val < 68.0):
+            metadata['skip_llm'] = False  # Mandatory DeepSeek LLM Audit
+            return 'BUY', f'⚡ BREAKOUT MOMENTUM PUMP SNIPER (Пробой 24h макс ${high_24h:.4f}, Об\'єм x{vol_ratio:.1f})', metadata
 
         # --- ЛОВЕЦЬ ВІДСКОКІВ (ULTRA-DIP REVERSAL: RSI < 25 OR Lower BB Piercing) ---
         prev_candle = df_calc.iloc[-2]
@@ -128,6 +137,11 @@ class HybridStrategy:
             if is_green_candle or is_price_rebounding:
                 metadata['skip_llm'] = False  # Mandatory DeepSeek LLM Audit
                 return 'BUY', f'⚡ ЛОВЕЦЬ ВІДСКОКІВ [Ultra-Dip Reversal] (RSI: {rsi_val:.1f} < 25, Пробій нижньої Боллінджера + Зелена свічка розвороту)', metadata
+
+        # Do not allow standard dip buys if the micro-trend is slumping (3 consecutive red candles or strong downward slope)
+        if last_3_red and slope_5_candles_pct < -0.20:
+            regime_tag = " [STABLE]" if is_stable else ""
+            return 'HOLD', f'Scanning market (RSI: {rsi_val:.1f}, Micro-Downtrend 3 Red Candles Slope: {slope_5_candles_pct:+.2f}%){regime_tag}', metadata
 
         # Standard Bullish Trend Oversold Entry
         if is_oversold and is_bullish_trend:
