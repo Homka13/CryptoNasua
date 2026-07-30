@@ -1,3 +1,5 @@
+let currentPlatform = 'bybit';
+
 function initApp() {
     const loginModal = document.getElementById('login-modal');
     const dashboard = document.getElementById('dashboard');
@@ -166,8 +168,6 @@ function initApp() {
     }
 
     // ===== PLATFORM TABS =====
-    let currentPlatform = 'bybit';
-
     function initPlatformTabs() {
         document.querySelectorAll('.platform-tab').forEach(tab => {
             tab.addEventListener('click', async () => {
