@@ -122,6 +122,17 @@ class BybitExchangeAdapter(BaseExchangeAdapter):
             if not self.exchange.markets:
                 self.exchange.load_markets()
             market = self.exchange.market(symbol)
+
+            if side == 'sell':
+                coin = symbol.split('/')[0]
+                try:
+                    bal = self.fetch_balance()
+                    free_coin = float(bal.get(coin, {}).get('free', 0.0) or 0.0)
+                    if free_coin > 0:
+                        amount = min(amount, free_coin)
+                except Exception as b_err:
+                    logger.debug(f"Could not check free balance for {coin}: {b_err}")
+
             min_cost = float(market.get('limits', {}).get('cost', {}).get('min') or 1.0)
             order_cost = amount * price
 

@@ -385,7 +385,20 @@ class TradingBot:
         })
 
         if status == 'EXCHANGE_REJECTED':
-            # Keep tracking it — the coins are still on the books.
+            if "Insufficient balance" in error_msg or "170131" in error_msg:
+                coin = symbol.split('/')[0]
+                try:
+                    bal = self.exchange.fetch_balance()
+                    free_coin = float(bal.get(coin, {}).get('free', 0.0) or 0.0)
+                    if free_coin * current_price < 0.50:
+                        logger.info(f"🧹 Clearing position {symbol} (Free balance {free_coin} < $0.50, already sold or rounded off)")
+                        self.active_positions = [p for p in self.active_positions if p.get('symbol') != symbol]
+                        self.active_position_metas.pop(symbol, None)
+                        self._save_positions()
+                        return True, f"Position {symbol} cleared (already sold on exchange)"
+                except Exception as b_check_err:
+                    logger.error(f"Error checking balance after sell rejection: {b_check_err}")
+
             return False, f"Exchange rejected SELL for {symbol}: {error_msg}"
 
         self.scan_logs.appendleft({
