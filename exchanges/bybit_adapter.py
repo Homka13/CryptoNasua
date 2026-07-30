@@ -123,6 +123,8 @@ class BybitExchangeAdapter(BaseExchangeAdapter):
                 self.exchange.load_markets()
             market = self.exchange.market(symbol)
 
+            # Apply exchange price and amount precision formatting
+            formatted_amount = float(self.exchange.amount_to_precision(symbol, amount))
             if side == 'sell':
                 coin = symbol.split('/')[0]
                 try:
@@ -130,19 +132,14 @@ class BybitExchangeAdapter(BaseExchangeAdapter):
                     free_coin = float(bal.get(coin, {}).get('free', 0.0) or 0.0)
                     if free_coin > 0:
                         amount = min(amount, free_coin)
+                        formatted_amount = float(self.exchange.amount_to_precision(symbol, amount))
+                        amount_precision = market.get('precision', {}).get('amount')
+                        step = float(amount_precision) if amount_precision else 0.0001
+                        if formatted_amount > free_coin and formatted_amount >= step:
+                            formatted_amount = float(self.exchange.amount_to_precision(symbol, formatted_amount - step))
                 except Exception as b_err:
                     logger.debug(f"Could not check free balance for {coin}: {b_err}")
 
-            min_cost = float(market.get('limits', {}).get('cost', {}).get('min') or 1.0)
-            order_cost = amount * price
-
-            if order_cost < min_cost:
-                required_amount = (min_cost * 1.05) / price
-                logger.warning(f"⚠️ Bybit Order cost (${order_cost:.2f}) < min_cost (${min_cost:.2f}). Adjusting amount to {required_amount:.4f}")
-                amount = required_amount
-
-            # Apply exchange price and amount precision formatting
-            formatted_amount = float(self.exchange.amount_to_precision(symbol, amount))
             formatted_price = float(self.exchange.price_to_precision(symbol, price)) if price > 0 else None
 
             if order_type == 'market' or formatted_price is None:

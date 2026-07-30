@@ -390,12 +390,12 @@ class TradingBot:
                 try:
                     bal = self.exchange.fetch_balance()
                     free_coin = float(bal.get(coin, {}).get('free', 0.0) or 0.0)
-                    if free_coin * current_price < 0.50:
-                        logger.info(f"🧹 Clearing position {symbol} (Free balance {free_coin} < $0.50, already sold or rounded off)")
+                    if free_coin * current_price < 5.00:
+                        logger.info(f"🧹 Clearing position {symbol} (Free balance {free_coin} value ${free_coin * current_price:.2f} < $5 min sellable order, cleared)")
                         self.active_positions = [p for p in self.active_positions if p.get('symbol') != symbol]
                         self.active_position_metas.pop(symbol, None)
                         self._save_positions()
-                        return True, f"Position {symbol} cleared (already sold on exchange)"
+                        return True, f"Position {symbol} cleared (remaining dust < $5 spot order minimum)"
                 except Exception as b_check_err:
                     logger.error(f"Error checking balance after sell rejection: {b_check_err}")
 
