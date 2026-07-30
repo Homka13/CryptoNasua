@@ -164,8 +164,9 @@ function initApp() {
 
     async function fetchStatus() {
         try {
+            const token = localStorage.getItem('bot_auth_token') || authToken;
             const resp = await fetch('/api/status', {
-                headers: { 'Authorization': `Bearer ${authToken}` }
+                headers: { 'Authorization': `Bearer ${token}` }
             });
             if (resp.status === 401) {
                 localStorage.removeItem('bot_auth_token');
@@ -362,7 +363,7 @@ function initApp() {
                         if (confirm(`Ви дійсно бажаєте вручну закрити позицію ${pos.symbol}?`)) {
                             await fetch('/api/control', {
                                 method: 'POST',
-                                headers: { 'Authorization': `Bearer ${authToken}`, 'Content-Type': 'application/json' },
+                                headers: { 'Authorization': `Bearer ${getAuthToken()}`, 'Content-Type': 'application/json' },
                                 body: JSON.stringify({ action: 'close_position' })
                             });
                             fetchStatus();
@@ -417,7 +418,7 @@ function initApp() {
     async function fetchOrders() {
         try {
             const resp = await fetch('/api/orders', {
-                headers: { 'Authorization': `Bearer ${authToken}` }
+                headers: { 'Authorization': `Bearer ${getAuthToken()}` }
             });
             if (!resp.ok) return;
             const data = await resp.json();
@@ -466,7 +467,7 @@ function initApp() {
 
         await fetch('/api/control', {
             method: 'POST',
-            headers: { 'Authorization': `Bearer ${authToken}`, 'Content-Type': 'application/json' },
+            headers: { 'Authorization': `Bearer ${getAuthToken()}`, 'Content-Type': 'application/json' },
             body: JSON.stringify({ action })
         });
         fetchStatus();
