@@ -126,6 +126,7 @@ class HybridStrategy:
             is_price_rebounding = float(current_candle['close']) > float(prev_candle['close'])
 
             if is_green_candle or is_price_rebounding:
+                metadata['skip_llm'] = False  # Mandatory DeepSeek LLM Audit
                 return 'BUY', f'⚡ ЛОВЕЦЬ ВІДСКОКІВ [Ultra-Dip Reversal] (RSI: {rsi_val:.1f} < 25, Пробій нижньої Боллінджера + Зелена свічка розвороту)', metadata
 
         # Standard Bullish Trend Oversold Entry

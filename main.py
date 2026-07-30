@@ -658,7 +658,7 @@ class TradingBot:
                     stagnant_sym = None
 
                     if self.active_positions:
-                        # Find the most stagnant position for auto-swap (only if at max capacity)
+                        # Find truly stagnant/losing position for auto-swap (minimum 8-minute hold time & significant RSI delta)
                         for pos in self.active_positions:
                             stagnant_sym = pos.get('symbol')
                             if stagnant_sym == best_buy_opportunity['symbol']:
@@ -668,12 +668,19 @@ class TradingBot:
                             pos_age_min = (now - entry_t) / 60.0
                             pos_meta = self.active_position_metas.get(stagnant_sym, {})
                             curr_p = pos_meta.get('price', entry_p)
+                            curr_rsi = float(pos_meta.get('rsi', 50) or 50)
+                            target_rsi = float(best_buy_opportunity['meta'].get('rsi', 50) or 50)
                             pnl_pct = ((curr_p - entry_p) / entry_p)
 
-                            if pos_age_min >= 2.0 or pnl_pct < 0 or (-0.020 <= pnl_pct <= 0.008):
+                            # Strict Swap Rule: Must be held for >= 8.0 min (or PnL <= -1.2%), and new candidate must have RSI at least 8 pts lower
+                            is_stagnant_time = (pos_age_min >= 8.0 and pnl_pct < 0.001)
+                            is_deep_loss = (pnl_pct <= -0.012)
+                            rsi_substantially_better = (target_rsi < (curr_rsi - 8.0))
+
+                            if (is_stagnant_time or is_deep_loss) and rsi_substantially_better:
                                 should_auto_swap = True
                                 stagnant_info = {'symbol': stagnant_sym, 'amount': pos['amount'], 'price': curr_p, 'age': pos_age_min, 'pnl': pnl_pct}
-                                logger.info(f"🔄 Candidate swap: {stagnant_sym} (Age: {pos_age_min:.1f}m, PnL: {pnl_pct*100:+.2f}%) → {best_buy_opportunity['symbol']}")
+                                logger.info(f"🔄 Candidate swap approved: {stagnant_sym} (Age: {pos_age_min:.1f}m, PnL: {pnl_pct*100:+.2f}%, RSI: {curr_rsi:.1f}) → {best_buy_opportunity['symbol']} (RSI: {target_rsi:.1f})")
                                 break
 
                     target_sym = best_buy_opportunity['symbol']
