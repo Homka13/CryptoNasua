@@ -556,6 +556,15 @@ function initApp() {
         }
     });
 
+    document.getElementById('stat-card-llm')?.addEventListener('click', async () => {
+        await fetch('/api/control', {
+            method: 'POST',
+            headers: { 'Authorization': `Bearer ${getAuthToken()}`, 'Content-Type': 'application/json' },
+            body: JSON.stringify({ action: 'toggle_llm' })
+        });
+        fetchStatus();
+    });
+
     document.getElementById('save-llm-key-btn')?.addEventListener('click', async () => {
         const keyInput = document.getElementById('llm-key-input');
         const key = keyInput ? keyInput.value.trim() : '';

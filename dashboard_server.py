@@ -302,8 +302,13 @@ class DashboardServer:
                 if key:
                     config.deepseek_api_key = key
                     config.llm_api_key = key
+                    config.use_llm_confirmation = True
                     return web.json_response({'success': True, 'message': 'API Key set successfully'})
                 return web.json_response({'success': False, 'error': 'Key cannot be empty'}, status=400)
+            elif action == 'toggle_llm':
+                config.use_llm_confirmation = not config.use_llm_confirmation
+                logger.info(f"🌐 LLM Confirmation Filter Toggled via Dashboard: {'ENABLED' if config.use_llm_confirmation else 'DISABLED'}")
+                return web.json_response({'success': True, 'llm_enabled': config.use_llm_confirmation})
             elif action == 'set_trading_mode':
                 new_mode = body.get('mode', 'chill').lower()
                 if new_mode in ('chill', 'hunt'):

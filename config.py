@@ -32,7 +32,7 @@ class TradingConfig:
     prevent_sleep: bool = os.getenv("PREVENT_SLEEP", "true").lower() == "true"
 
     # LLM Confirmation Filter (Gemini / OpenAI / DeepSeek / OpenRouter)
-    use_llm_confirmation: bool = os.getenv("USE_LLM_CONFIRMATION", "false").lower() == "true"
+    use_llm_confirmation: bool = os.getenv("USE_LLM_CONFIRMATION", "true").lower() == "true"
     llm_api_key: str = os.getenv("LLM_API_KEY", "")
     llm_provider: str = os.getenv("LLM_PROVIDER", "gemini").lower()  # gemini, openai, deepseek
     deepseek_api_key: str = os.getenv("DEEPSEEK_API_KEY", os.getenv("LLM_API_KEY", ""))
