@@ -73,6 +73,13 @@ class HybridStrategy:
         ema20_1h_ago = float(df_calc['ema_fast'].iloc[-5]) if len(df_calc) >= 5 else ema_fast_val
         ema20_slope_pct = ((ema_fast_val - ema20_1h_ago) / ema20_1h_ago) * 100.0 if ema20_1h_ago > 0 else 0.0
 
+        # --- 🏰 LOCAL RESISTANCE (DOUBLE TOP CEILING) DETECTION ---
+        recent_highs = df_calc['high'].tail(20).values
+        sorted_highs = sorted(recent_highs, reverse=True)
+        resistance_high = sorted_highs[0]
+        dist_to_resistance_pct = ((resistance_high - current_price) / current_price) * 100.0 if current_price > 0 else 0.0
+        is_near_resistance = abs(dist_to_resistance_pct) <= 0.20
+
         metadata = {
             'price': current_price,
             'rsi': rsi_val,
@@ -86,7 +93,10 @@ class HybridStrategy:
             'slope_5_candles_pct': round(slope_5_candles_pct, 2),
             'change_1h_pct': round(change_1h_pct, 2),
             'ema20_slope_pct': round(ema20_slope_pct, 2),
-            'last_3_red': last_3_red
+            'last_3_red': last_3_red,
+            'resistance_high': round(float(resistance_high), 4),
+            'dist_to_resistance_pct': round(float(dist_to_resistance_pct), 2),
+            'is_near_resistance': is_near_resistance
         }
 
         # 1. Check active position for Trailing Stop / Take-Profit / Stop-Loss
@@ -98,6 +108,14 @@ class HybridStrategy:
             highest_price = max(current_position.get('highest_price', entry_price), current_price)
             current_position['highest_price'] = highest_price
             peak_gain_pct = (highest_price - entry_price) / entry_price
+
+            # --- 🏰 LOCAL RESISTANCE (DOUBLE TOP CEILING) TAKE-PROFIT LOCK ---
+            res_high = metadata.get('resistance_high', current_price)
+            dist_to_res = metadata.get('dist_to_resistance_pct', 1.0)
+            latest_is_red = float(latest['close']) < float(latest['open'])
+
+            if price_change >= 0.0015 and dist_to_res <= 0.20 and latest_is_red:
+                return 'SELL', f'🏰 RESISTANCE TAKE-PROFIT (Опір ${res_high:.4f}, PnL: {price_change*100:+.2f}%, Фіксація прибутку біля подвійного верху)', metadata
 
             tp_threshold = config.stable_mode_tp_pct if is_stable else 0.0050
             if peak_gain_pct >= tp_threshold:

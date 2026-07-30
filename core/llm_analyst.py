@@ -173,6 +173,8 @@ Current PnL: {pnl_pct:+.2f}%.
 
 Technical Indicators:
 - Current Price: ${meta.get('price', 0):.4f}
+- Local Resistance Ceiling (Double Top): ${meta.get('resistance_high', 0):.4f} (Distance: {meta.get('dist_to_resistance_pct', 0):+.2f}%)
+- Near Local Resistance Level: {meta.get('is_near_resistance', False)}
 - RSI (14): {meta.get('rsi', 0):.1f}
 - EMA 20: ${meta.get('ema_fast', 0):.4f}
 - EMA 50: ${meta.get('ema_slow', 0):.4f}
@@ -180,12 +182,13 @@ Technical Indicators:
 
 STRICT GUARDIAN RULES:
 1. GREEN CANDLE / BULLISH MOMENTUM GUARD: If current PnL is POSITIVE (PnL > 0.0%) and price is crawling/creeping UP (bullish candles building), YOU MUST RECOMMEND HOLD! NEVER cut a trade that is in profit and moving up before its Take Profit target is hit.
-2. DYNAMIC TIMING RULES:
+2. LOCAL RESISTANCE TAKE-PROFIT RULE: If current PnL is POSITIVE (PnL >= +0.15%) AND current price reaches or tests local resistance ceiling (${meta.get('resistance_high', 0):.4f}) and starts pulling back, RECOMMEND SELL to lock in profit at resistance before a rejection bounce!
+3. DYNAMIC TIMING RULES:
    - For {module_name}, the trade needs up to {max_allowed_stagnation_min:.0f} minutes to fully develop.
-   - If hold time is less than {max_allowed_stagnation_min:.0f} minutes and PnL >= 0.0%, ALWAYS RECOMMEND HOLD.
-3. EXIT ONLY ON FAKEOUT / DUMP:
+   - If hold time is less than {max_allowed_stagnation_min:.0f} minutes and PnL >= 0.0% (not stalling at resistance), ALWAYS RECOMMEND HOLD.
+4. EXIT ONLY ON FAKEOUT / DUMP:
    - Only recommend SELL if hold time EXCEEDS {max_allowed_stagnation_min:.0f} minutes AND PnL is NEGATIVE or FLAT (PnL < 0.0%) with RSI dropping below 40.
-4. Respond ONLY in valid JSON with format:
+5. Respond ONLY in valid JSON with format:
 {{"action": "SELL" or "HOLD", "reason": "Short 1-sentence Ukrainian explanation"}}"""
 
         try:
