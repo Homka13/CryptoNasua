@@ -167,17 +167,23 @@ class DashboardServer:
         if real_bal and 'USDT' in real_bal:
             real_usdt = real_bal['USDT'].get('total', real_bal['USDT'].get('free', 0.0))
 
-        active_pos_payload = None
-        if self.bot.current_position:
-            active_pos_payload = dict(self.bot.current_position)
-            pos_sym = active_pos_payload.get('symbol')
-            pos_meta = getattr(self.bot, 'active_position_meta', {})
-            if pos_meta and pos_meta.get('symbol') == pos_sym:
-                active_pos_payload['current_price'] = pos_meta.get('price', active_pos_payload.get('entry_price'))
-                active_pos_payload['rsi'] = pos_meta.get('rsi', 50.0)
-                active_pos_payload['trend'] = pos_meta.get('trend', 'UNKNOWN')
-                active_pos_payload['ema_fast'] = pos_meta.get('ema_fast', 0.0)
-                active_pos_payload['ema_slow'] = pos_meta.get('ema_slow', 0.0)
+        # Build enriched active positions payload with live meta
+        active_positions_payload = []
+        for pos in getattr(self.bot, 'active_positions', []):
+            pos_payload = dict(pos)
+            pos_sym = pos_payload.get('symbol')
+            pos_metas = getattr(self.bot, 'active_position_metas', {})
+            pos_meta = pos_metas.get(pos_sym, {})
+            if pos_meta:
+                pos_payload['current_price'] = pos_meta.get('price', pos_payload.get('entry_price'))
+                pos_payload['rsi'] = pos_meta.get('rsi', 50.0)
+                pos_payload['trend'] = pos_meta.get('trend', 'UNKNOWN')
+                pos_payload['ema_fast'] = pos_meta.get('ema_fast', 0.0)
+                pos_payload['ema_slow'] = pos_meta.get('ema_slow', 0.0)
+            active_positions_payload.append(pos_payload)
+
+        # Backward compat: also send the first position as active_position
+        active_pos_payload = active_positions_payload[0] if active_positions_payload else None
 
         active_ex = getattr(config, 'active_exchange', getattr(config, 'exchange_name', 'bybit')).upper()
         payload = {
@@ -205,7 +211,9 @@ class DashboardServer:
             'trading_mode_display': config.trading_mode_display,
             'min_llm_confidence': config.min_llm_confidence,
             'prevent_sleep': getattr(config, 'prevent_sleep', True),
+            'active_positions': active_positions_payload,
             'active_position': active_pos_payload,
+            'max_concurrent_positions': getattr(self.bot, 'max_concurrent_positions', 3),
             'scan_logs': list(getattr(self.bot, 'scan_logs', []))
         }
         return web.json_response(payload)
@@ -214,14 +222,29 @@ class DashboardServer:
         if not self._verify_session(request):
             return web.json_response({'error': 'Unauthorized'}, status=401)
 
-        orders = getattr(self.bot.exchange, 'closed_orders', []) if self.bot.exchange else []
+        # Trade actions are the primary data — every BUY/SELL execution
+        trade_actions = list(getattr(self.bot, 'trade_actions', []))
+        # Also include AI verdicts for transparency
         verdicts = list(getattr(self.bot, 'ai_verdicts', []))
+        # Fallback: legacy closed_orders from exchange adapter
+        legacy_orders = getattr(self.bot.exchange, 'closed_orders', []) if self.bot.exchange else []
 
-        # Combine orders and AI verdicts sorted by timestamp descending
-        all_items = list(orders) + list(verdicts)
+        # Combine: trade actions first, then verdicts, then legacy orders
+        seen_ids = set()
+        all_items = []
+        for item in trade_actions + verdicts + legacy_orders:
+            uid = f"{item.get('symbol','')}|{item.get('side','')}|{item.get('timestamp',0)}"
+            if uid not in seen_ids:
+                seen_ids.add(uid)
+                all_items.append(item)
+
         all_items.sort(key=lambda x: x.get('timestamp', 0), reverse=True)
 
-        return web.json_response(all_items)
+        return web.json_response({
+            'trade_actions': trade_actions,
+            'ai_verdicts': verdicts,
+            'order_history': all_items
+        })
 
     async def handle_get_klines(self, request: web.Request) -> web.Response:
         if not self._verify_session(request):
@@ -274,12 +297,66 @@ class DashboardServer:
                 logger.info(f"🌐 Execution Mode Toggled via Dashboard: {'PAPER TRADING ($10)' if config.paper_trading else 'LIVE CEX REAL'}")
                 return web.json_response({'success': True, 'paper_trading': config.paper_trading})
             elif action == 'close_position':
-                if self.bot.current_position:
-                    logger.info(f"🔴 Position manually closed via Web Dashboard UI for {self.bot.current_position.get('symbol')}")
-                    self.bot.current_position = None
-                    self.bot._save_position(None)
-                    return web.json_response({'success': True, 'message': 'Position closed successfully'})
-                return web.json_response({'success': False, 'error': 'No active position to close'}, status=400)
+                target_symbol = body.get('symbol')
+                positions = getattr(self.bot, 'active_positions', [])
+                if target_symbol:
+                    pos_to_close = None
+                    for p in positions:
+                        if p.get('symbol') == target_symbol:
+                            pos_to_close = p
+                            break
+                    if pos_to_close:
+                        logger.info(f"🔴 Position manually closed via Web Dashboard for {target_symbol}")
+                        # Record trade action for manual close
+                        entry_p = pos_to_close.get('entry_price', 0)
+                        pos_meta = self.bot.active_position_metas.get(target_symbol, {})
+                        curr_p = pos_meta.get('price', entry_p)
+                        pnl_pct = ((curr_p - entry_p) / entry_p) * 100 if entry_p > 0 else 0
+                        self.bot.trade_actions.appendleft({
+                            'timestamp': int(time.time() * 1000),
+                            'time': time.strftime("%H:%M:%S"),
+                            'symbol': target_symbol,
+                            'side': 'SELL',
+                            'amount': pos_to_close.get('amount', 0),
+                            'price': curr_p,
+                            'entry_price': entry_p,
+                            'pnl_pct': round(pnl_pct, 2),
+                            'pnl_usdt': round((curr_p - entry_p) * pos_to_close.get('amount', 0), 4),
+                            'reason': '🔴 Вручну через Dashboard',
+                            'status': 'FILLED'
+                        })
+                        self.bot.active_positions = [p for p in positions if p.get('symbol') != target_symbol]
+                        self.bot.active_position_metas.pop(target_symbol, None)
+                        self.bot._save_positions()
+                        return web.json_response({'success': True, 'message': f'Position {target_symbol} closed successfully'})
+                    return web.json_response({'success': False, 'error': f'No active position found for {target_symbol}'}, status=400)
+                else:
+                    if positions:
+                        logger.info(f"🔴 All positions manually closed via Web Dashboard ({len(positions)} positions)")
+                        for p in positions:
+                            entry_p = p.get('entry_price', 0)
+                            sym = p.get('symbol', '')
+                            pos_meta = self.bot.active_position_metas.get(sym, {})
+                            curr_p = pos_meta.get('price', entry_p)
+                            pnl_pct = ((curr_p - entry_p) / entry_p) * 100 if entry_p > 0 else 0
+                            self.bot.trade_actions.appendleft({
+                                'timestamp': int(time.time() * 1000),
+                                'time': time.strftime("%H:%M:%S"),
+                                'symbol': sym,
+                                'side': 'SELL',
+                                'amount': p.get('amount', 0),
+                                'price': curr_p,
+                                'entry_price': entry_p,
+                                'pnl_pct': round(pnl_pct, 2),
+                                'pnl_usdt': round((curr_p - entry_p) * p.get('amount', 0), 4),
+                                'reason': '🔴 Вручну через Dashboard (всі)',
+                                'status': 'FILLED'
+                            })
+                        self.bot.active_positions = []
+                        self.bot.active_position_metas = {}
+                        self.bot._save_positions()
+                        return web.json_response({'success': True, 'message': f'All {len(positions)} positions closed'})
+                    return web.json_response({'success': False, 'error': 'No active positions to close'}, status=400)
             elif action == 'set_exchange':
                 ex_name = body.get('exchange', 'bybit').lower()
                 if ex_name in ('bybit', 'binance'):
@@ -297,14 +374,6 @@ class DashboardServer:
                 self.bot.exchange = ExchangeFactory.create_adapter()
                 logger.info(f"🌐 Execution Mode Switched via Dashboard: {'PAPER TRADING' if config.paper_trading else 'LIVE CEX REAL'}")
                 return web.json_response({'success': True, 'paper_trading': config.paper_trading})
-            elif action == 'set_llm_key':
-                key = body.get('key', '').strip()
-                if key:
-                    config.deepseek_api_key = key
-                    config.llm_api_key = key
-                    config.use_llm_confirmation = True
-                    return web.json_response({'success': True, 'message': 'API Key set successfully'})
-                return web.json_response({'success': False, 'error': 'Key cannot be empty'}, status=400)
             elif action == 'toggle_llm':
                 config.use_llm_confirmation = not config.use_llm_confirmation
                 logger.info(f"🌐 LLM Confirmation Filter Toggled via Dashboard: {'ENABLED' if config.use_llm_confirmation else 'DISABLED'}")

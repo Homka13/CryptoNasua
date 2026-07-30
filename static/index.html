@@ -59,7 +59,20 @@
                 <h1>Crypto Bot Dashboard</h1>
                 <span id="mode-badge" class="badge badge-paper">PAPER TRADING</span>
             </div>
-            
+
+            <!-- Platform Selector Tabs -->
+            <div class="platform-tabs" id="platform-tabs">
+                <button class="platform-tab active bybit" data-platform="bybit" id="plat-bybit">
+                    🟢 Bybit Spot
+                </button>
+                <button class="platform-tab" data-platform="binance" id="plat-binance">
+                    🟡 Binance Spot
+                </button>
+                <button class="platform-tab active paper" data-platform="paper" id="plat-paper" style="display:none;">
+                    🧪 Paper Trading
+                </button>
+            </div>
+
             <div class="user-profile">
                 <span id="user-email-display" class="user-email">yuhim1308@gmail.com</span>
                 <button id="logout-btn" class="btn btn-sm btn-outline">Вийти</button>
@@ -93,11 +106,11 @@
             </div>
         </section>
 
-        <!-- Active Position Banner -->
-        <section id="active-position-container" class="glass-card section-card position-section" style="margin-bottom: 24px;">
-            <h3>📌 Активна Позиція</h3>
-            <div id="active-position-content">
-                <p class="text-muted">Немає відкритих угод (Сканування ринку...)</p>
+        <!-- Active Positions Grid -->
+        <section class="glass-card section-card" style="margin-bottom: 20px;">
+            <h3>📌 Активні Позиції <span id="positions-count-badge" class="badge badge-paper" style="font-size:0.7rem;">0</span></h3>
+            <div id="active-positions-container">
+                <div class="empty-positions">Немає відкритих угод — сканування ринку триває...</div>
             </div>
         </section>
 
@@ -139,14 +152,6 @@
                     </div>
 
                     <div class="control-row">
-                        <span>Платформа / Біржа:</span>
-                        <select id="exchange-select" class="input-field select-field" style="width: auto; margin-bottom: 0;">
-                            <option value="bybit">🟢 Bybit Spot (CEX)</option>
-                            <option value="binance">🟡 Binance Spot (CEX)</option>
-                        </select>
-                    </div>
-
-                    <div class="control-row">
                         <span>Захист від сну (24/7 Windows Keep-Alive):</span>
                         <button id="toggle-sleep-btn" class="btn btn-sm btn-outline">💤 24/7 АКТИВНИЙ</button>
                     </div>
@@ -180,10 +185,10 @@
         <section class="glass-card section-card" style="margin-bottom: 24px; padding: 20px;">
             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; flex-wrap: wrap; gap: 12px;">
                 <h3 style="margin: 0; display: flex; align-items: center; gap: 8px;">
-                    📊 Інтерактивний Графік Біржі <span style="color: #63b3ed; font-size: 0.8rem; font-weight: bold;">(TradingView Bybit Spot | Стабільний без дрижань)</span>
+                    📊 Інтерактивний Графік <span id="chart-exchange-label" style="color: #f7a600; font-size: 0.8rem; font-weight: bold;">(Bybit Spot)</span>
                 </h3>
                 <div style="display: flex; gap: 8px; align-items: center;">
-                    <span id="chart-pair-title" style="color: #48bb78; font-weight: bold; font-family: monospace; font-size: 1.05rem;">BYBIT: SOLUSDT</span>
+                    <span id="chart-pair-title" style="color: #48bb78; font-weight: bold; font-family: monospace; font-size: 1.05rem;">BYBIT:SOLUSDT</span>
                     <span class="pulse-dot green"></span>
                 </div>
             </div>
@@ -214,37 +219,26 @@
                 </div>
             </div>
 
-            <!-- Panel 2: Orders & LLM Review History Table -->
+            <!-- Panel 2: Trade Actions (Buy/Sell) + AI Verdicts -->
             <div class="glass-card panel-card-fixed">
                 <div class="panel-header">
                     <h3 style="margin: 0; font-size: 1.05rem; display: flex; align-items: center; gap: 8px;">
-                        📜 Історія Угод та ШІ Вердикти
+                        📜 Торгові Дії (Buy / Sell)
                     </h3>
-                    <span id="history-count-badge" class="badge" style="font-size: 0.75rem;">0 записів</span>
+                    <div style="display:flex;gap:8px;align-items:center;">
+                        <span id="trade-actions-count" class="badge" style="font-size:0.7rem;background:rgba(16,185,129,0.15);color:#10b981;border:1px solid rgba(16,185,129,0.3);">0</span>
+                        <span id="ai-verdicts-count" class="badge" style="font-size:0.7rem;background:rgba(139,92,246,0.15);color:#a78bfa;border:1px solid rgba(139,92,246,0.3);">0 🤖</span>
+                    </div>
                 </div>
-                <div class="table-wrapper-scrollable">
-                    <table class="data-table">
-                        <thead>
-                            <tr>
-                                <th>Час</th>
-                                <th>Пара</th>
-                                <th>Тип</th>
-                                <th>Ціна</th>
-                                <th>Статус</th>
-                                <th>ШІ Причина</th>
-                            </tr>
-                        </thead>
-                        <tbody id="orders-table-body">
-                            <tr>
-                                <td colspan="6" class="text-center" style="padding: 20px; color: #718096;">Очікування першої угоди...</td>
-                            </tr>
-                        </tbody>
-                    </table>
+                <div class="table-wrapper-scrollable" id="trade-actions-wrapper">
+                    <div id="trade-actions-list" style="padding:4px;">
+                        <div class="empty-positions" style="margin:0;border:none;">Очікування перших торгових дій...</div>
+                    </div>
                 </div>
             </div>
         </section>
     </div>
 
-    <script src="/static/app.js?v=20260729_v26"></script>
+    <script src="/static/app.js?v=20260730_v28"></script>
 </body>
 </html>

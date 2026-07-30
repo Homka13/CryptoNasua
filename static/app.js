@@ -156,12 +156,59 @@ function initApp() {
         }
         if (userEmailDisplay) userEmailDisplay.innerText = userEmail;
 
+        // Init platform tabs
+        initPlatformTabs();
+
         fetchStatus();
         fetchOrders();
         setInterval(fetchStatus, 3000);
         setInterval(fetchOrders, 5000);
     }
 
+    // ===== PLATFORM TABS =====
+    let currentPlatform = 'bybit';
+
+    function initPlatformTabs() {
+        document.querySelectorAll('.platform-tab').forEach(tab => {
+            tab.addEventListener('click', async () => {
+                const platform = tab.dataset.platform;
+                if (platform === currentPlatform) return;
+
+                // Only allow switching between bybit and binance via these tabs
+                if (platform === 'paper') return;
+
+                setActivePlatformTab(platform);
+                await switchPlatform(platform);
+            });
+        });
+    }
+
+    function setActivePlatformTab(platform) {
+        currentPlatform = platform;
+        document.querySelectorAll('.platform-tab').forEach(t => {
+            t.classList.remove('active', 'bybit', 'binance', 'paper');
+            if (t.dataset.platform === platform) {
+                t.classList.add('active', platform);
+            }
+        });
+    }
+
+    async function switchPlatform(platform) {
+        await fetch('/api/control', {
+            method: 'POST',
+            headers: { 'Authorization': `Bearer ${getAuthToken()}`, 'Content-Type': 'application/json' },
+            body: JSON.stringify({ action: 'set_exchange', exchange: platform })
+        });
+        // Force chart update with new exchange
+        if (tvWidgetInstance) {
+            try { tvWidgetInstance.remove(); } catch(e) {}
+            tvWidgetInstance = null;
+            currentTvSymbol = '';
+        }
+        fetchStatus();
+    }
+
+    // ===== STATUS POLLING =====
     async function fetchStatus() {
         try {
             const token = localStorage.getItem('bot_auth_token') || authToken;
@@ -177,59 +224,47 @@ function initApp() {
             }
             const data = await resp.json();
 
-            // Update UI Stats
             const isPaper = data.paper_trading;
+            const activeEx = data.active_exchange || 'BYBIT';
             const totalUsdt = data.usdt_total !== undefined ? data.usdt_total : data.usdt_balance;
             const freeUsdt = data.usdt_balance !== undefined ? data.usdt_balance : 0;
             const initUsdt = data.initial_capital !== undefined ? data.initial_capital : 10;
             const realUsdt = data.real_usdt_balance;
 
+            // Sync platform tabs with server state
+            if (activeEx && activeEx.toLowerCase() !== currentPlatform) {
+                setActivePlatformTab(activeEx.toLowerCase());
+            }
+
+            // Balance stat
             const statBal = document.getElementById('stat-balance');
             const balSubElem = document.getElementById('stat-balance-sub');
-
             if (isPaper) {
                 if (statBal) statBal.innerText = `$${totalUsdt.toFixed(2)} USDT (Демо)`;
                 if (balSubElem) {
-                    let subText = `Вільні кошти: $${freeUsdt.toFixed(2)}`;
+                    let subText = `Вільні: $${freeUsdt.toFixed(2)} | Стартові: $${initUsdt.toFixed(2)}`;
                     if (realUsdt !== null && realUsdt !== undefined) {
-                        subText += ` | Real Bybit: $${realUsdt.toFixed(2)} USDT`;
-                    } else {
-                        subText += ` | Початкові: $${initUsdt.toFixed(2)}`;
+                        subText += ` | Real ${activeEx}: $${realUsdt.toFixed(2)}`;
                     }
                     balSubElem.innerText = subText;
                 }
             } else {
-                if (statBal) statBal.innerText = `$${totalUsdt.toFixed(2)} USDT (Live Bybit)`;
-                if (balSubElem) {
-                    balSubElem.innerText = `Доступний залишок Bybit: $${freeUsdt.toFixed(2)} USDT`;
-                }
+                if (statBal) statBal.innerText = `$${totalUsdt.toFixed(2)} USDT (Live ${activeEx})`;
+                if (balSubElem) balSubElem.innerText = `Доступний залишок ${activeEx}: $${freeUsdt.toFixed(2)} USDT`;
             }
 
+            // Price stat
             const statPrice = document.getElementById('stat-symbol-price');
             if (statPrice) statPrice.innerText = `${data.symbol} $${data.current_price < 0.01 ? data.current_price.toFixed(8) : data.current_price.toFixed(4)}`;
 
             const statTf = document.getElementById('stat-timeframe');
             if (statTf) statTf.innerText = `Таймфрейм: ${data.timeframe}`;
-            
-            // Execution Mode Buttons Sync
-            const btnExecPaper = document.getElementById('btn-exec-paper');
-            const btnExecLive = document.getElementById('btn-exec-live');
-            if (btnExecPaper && btnExecLive) {
-                if (isPaper) {
-                    btnExecPaper.className = 'btn-mode active-chill';
-                    btnExecLive.className = 'btn-mode';
-                } else {
-                    btnExecPaper.className = 'btn-mode';
-                    btnExecLive.className = 'btn-mode active-hunt';
-                }
-            }
 
-            // Trading mode stat & buttons
+            // Trading mode
             const modeElem = document.getElementById('stat-trading-mode');
             const modeSubElem = document.getElementById('stat-trading-mode-sub');
             const btnChill = document.getElementById('btn-mode-chill');
             const btnHunt = document.getElementById('btn-mode-hunt');
-
             if (data.trading_mode === 'chill') {
                 if (modeElem) modeElem.innerText = '🦝 CHILL (90%)';
                 if (modeSubElem) modeSubElem.innerText = 'Снайпер: 1-3 ідеальні угоди/день';
@@ -242,10 +277,9 @@ function initApp() {
                 if (btnHunt) btnHunt.className = 'btn-mode active-hunt';
             }
 
+            // LLM status
             const llmElem = document.getElementById('stat-llm-status');
             const providerSelect = document.getElementById('provider-select');
-            const llmKeyInput = document.getElementById('llm-key-input');
-
             if (llmElem) {
                 if (data.llm_enabled) {
                     llmElem.innerText = `АКТИВНИЙ (${data.llm_provider})`;
@@ -259,7 +293,9 @@ function initApp() {
                 providerSelect.value = data.llm_provider.toLowerCase();
             }
 
+            // LLM Key Badge
             const llmBadge = document.getElementById('llm-key-status-badge');
+            const llmKeyInput = document.getElementById('llm-key-input');
             if (llmBadge) {
                 if (data.llm_key_set && data.llm_key_masked) {
                     llmBadge.innerText = `🟢 Підключено: ${data.llm_key_masked}`;
@@ -273,7 +309,13 @@ function initApp() {
                     llmBadge.style.borderColor = 'rgba(245, 101, 101, 0.4)';
                 }
             }
+            if (llmKeyInput && !llmKeyInput.value) {
+                llmKeyInput.placeholder = (data.llm_key_set && data.llm_key_masked)
+                    ? `Ключ: ${data.llm_key_masked}`
+                    : "Введіть ваш sk-... ключ тут";
+            }
 
+            // Sleep button
             const sleepBtn = document.getElementById('toggle-sleep-btn');
             if (sleepBtn) {
                 if (data.prevent_sleep) {
@@ -285,6 +327,7 @@ function initApp() {
                 }
             }
 
+            // Execution mode button
             const execBtn = document.getElementById('toggle-execution-mode-btn');
             if (execBtn) {
                 if (data.paper_trading) {
@@ -292,118 +335,50 @@ function initApp() {
                     execBtn.className = 'btn btn-sm btn-outline';
                     execBtn.style.boxShadow = 'none';
                 } else {
-                    execBtn.innerText = '⚡ LIVE Торгівля (Bybit Real)';
+                    execBtn.innerText = `⚡ LIVE Торгівля (${activeEx} Real)`;
                     execBtn.className = 'btn btn-sm btn-danger';
-                    execBtn.style.boxShadow = '0 0 12px rgba(239, 68, 68, 0.5)';
+                    execBtn.style.boxShadow = '0 0 14px rgba(244, 63, 94, 0.5)';
                 }
             }
 
-            if (llmKeyInput && !llmKeyInput.value) {
-                if (data.llm_key_set && data.llm_key_masked) {
-                    llmKeyInput.placeholder = `Ключ: ${data.llm_key_masked}`;
-                } else {
-                    llmKeyInput.placeholder = "Введіть ваш sk-... ключ тут";
-                }
-            }
-
-            const exSelect = document.getElementById('exchange-select');
-            if (exSelect && data.active_exchange) {
-                exSelect.value = data.active_exchange.toLowerCase();
-            }
-
+            // Symbol select sync
             const symbolSelect = document.getElementById('symbol-select');
-            if (symbolSelect && data.symbol) {
-                symbolSelect.value = data.symbol;
-            }
+            if (symbolSelect && data.symbol) symbolSelect.value = data.symbol;
 
             // Mode badge
             const modeBadge = document.getElementById('mode-badge');
-            if (modeBadge) modeBadge.innerText = data.mode;
+            if (modeBadge) {
+                modeBadge.innerText = data.mode;
+                modeBadge.className = isPaper ? 'badge badge-paper' : 'badge badge-live';
+                modeBadge.style.display = 'inline-block';
+            }
 
-            // Active Position
-            // Update Watchlist Bar and stable TradingView chart for selected symbol
+            // Update chart exchange label
+            const chartExLabel = document.getElementById('chart-exchange-label');
+            if (chartExLabel) {
+                const exColor = activeEx === 'BINANCE' ? '#f0b90b' : '#f7a600';
+                chartExLabel.innerText = `(${activeEx.charAt(0) + activeEx.slice(1).toLowerCase()} Spot)`;
+                chartExLabel.style.color = exColor;
+            }
+
+            // Active Positions
+            const positions = data.active_positions || [];
+            if (data.active_position && !positions.find(p => p.symbol === data.active_position.symbol)) {
+                positions.push(data.active_position);
+            }
+            renderActivePositions(positions);
+
+            // Set default chart symbol
             if (!currentChartSymbol) {
-                if (data.active_position && data.active_position.symbol) {
-                    currentChartSymbol = data.active_position.symbol;
+                if (positions.length > 0) {
+                    currentChartSymbol = positions[0].symbol;
                 } else {
                     currentChartSymbol = 'SOL/USDT';
                 }
             }
-            
-            updateWatchlistBar(data.scan_logs, data.active_position);
+
+            updateWatchlistBar(data.scan_logs, positions);
             updateTradingViewChart(currentChartSymbol, false);
-
-            const posContent = document.getElementById('active-position-content');
-            if (posContent) {
-                if (data.active_position) {
-                    const pos = data.active_position;
-                    const currPrice = pos.current_price || pos.entry_price;
-                    const pnl = ((currPrice - pos.entry_price) / pos.entry_price) * 100;
-                    const pnlUsdt = (currPrice - pos.entry_price) * pos.amount;
-                    const pnlClass = pnl >= 0 ? 'text-green' : 'text-red';
-                    
-                    const highestPrice = pos.highest_price || pos.entry_price;
-                    const peakGainPct = Math.max(0, ((highestPrice - pos.entry_price) / pos.entry_price) * 100);
-                    
-                    const entryTimeVal = pos.entry_time || pos.timestamp;
-                    const entryTimestamp = entryTimeVal ? (entryTimeVal > 1e11 ? entryTimeVal : entryTimeVal * 1000) : Date.now();
-                    const holdMin = Math.max(0, (Date.now() - entryTimestamp) / (1000 * 60));
-
-                    const posRsi = pos.rsi !== undefined ? pos.rsi : (data.rsi || 50.0);
-                    const posTrend = pos.trend || data.trend || 'UNKNOWN';
-                    const posEmaFast = pos.ema_fast || data.ema_fast;
-                    const posEmaSlow = pos.ema_slow || data.ema_slow;
-
-                    const rsiVal = posRsi.toFixed(1);
-                    const rsiColor = posRsi <= 30 ? '#48bb78' : (posRsi >= 70 ? '#f56565' : '#63b3ed');
-                    const trendColor = posTrend === 'BULLISH' ? '#48bb78' : (posTrend === 'BEARISH' ? '#f56565' : '#a0aec0');
-
-                    posContent.innerHTML = `
-                        <div style="display: flex; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; gap: 16px;">
-                            <div>
-                                <div style="font-size: 1.15rem; font-weight: 700; margin-bottom: 4px;">
-                                    <strong>${pos.symbol}</strong> — ${pos.amount.toFixed(4)} монет
-                                </div>
-                                <div style="display: flex; gap: 16px; font-size: 0.88rem; color: #a0aec0; flex-wrap: wrap; margin-bottom: 6px;">
-                                    <span>Ціна входу: <strong>$${pos.entry_price < 0.01 ? pos.entry_price.toFixed(8) : pos.entry_price.toFixed(4)}</strong></span>
-                                    <span>Поточна ціна: <strong>$${currPrice < 0.01 ? currPrice.toFixed(8) : currPrice.toFixed(4)}</strong></span>
-                                    <span>Час в утримуванні: <strong>${holdMin.toFixed(1)} хв</strong></span>
-                                </div>
-                                <div style="display: flex; gap: 12px; align-items: center; flex-wrap: wrap; margin-bottom: 8px;">
-                                    <span class="${pnlClass}" style="font-size: 1.25rem; font-weight: 800;">
-                                        PnL: ${pnl >= 0 ? '+' : ''}${pnl.toFixed(2)}% (${pnlUsdt >= 0 ? '+' : ''}$${pnlUsdt.toFixed(4)} USDT)
-                                    </span>
-                                    <span class="badge" style="background: rgba(99, 179, 237, 0.15); color: #63b3ed; border: 1px solid rgba(99, 179, 237, 0.3); font-size: 0.85rem; padding: 4px 8px;">
-                                        📈 Пік прибутку: +${peakGainPct.toFixed(2)}%
-                                    </span>
-                                </div>
-                                <div style="font-size: 0.83rem; background: rgba(255,255,255,0.03); padding: 6px 12px; border-radius: 6px; border: 1px solid rgba(255,255,255,0.06); display: flex; gap: 14px; flex-wrap: wrap; color: #cbd5e0;">
-                                    <span>🔎 <strong>Текучий стан:</strong></span>
-                                    <span>RSI: <strong style="color: ${rsiColor}">${rsiVal}</strong></span>
-                                    <span>Тренд: <strong style="color: ${trendColor}">${posTrend}</strong></span>
-                                    <span>EMA20/50: <strong>$${posEmaFast ? (posEmaFast < 0.01 ? posEmaFast.toFixed(8) : posEmaFast.toFixed(4)) : '-'} / $${posEmaSlow ? (posEmaSlow < 0.01 ? posEmaSlow.toFixed(8) : posEmaSlow.toFixed(4)) : '-'}</strong></span>
-                                </div>
-                            </div>
-                            <button id="close-position-btn" class="btn btn-sm btn-danger" style="font-weight: bold; padding: 10px 18px; border-radius: 6px; margin-top: 4px;">
-                                🔴 Закрити Позицію
-                            </button>
-                        </div>
-                    `;
-
-                    document.getElementById('close-position-btn')?.addEventListener('click', async () => {
-                        if (confirm(`Ви дійсно бажаєте вручну закрити позицію ${pos.symbol}?`)) {
-                            await fetch('/api/control', {
-                                method: 'POST',
-                                headers: { 'Authorization': `Bearer ${getAuthToken()}`, 'Content-Type': 'application/json' },
-                                body: JSON.stringify({ action: 'close_position' })
-                            });
-                            fetchStatus();
-                        }
-                    });
-                } else {
-                    posContent.innerHTML = `<p class="text-muted" style="margin: 0;">Немає відкритих угод (Сканування ринку...)</p>`;
-                }
-            }
 
             // Controls state
             const toggleActiveBtn = document.getElementById('toggle-active-btn');
@@ -417,28 +392,30 @@ function initApp() {
                 }
             }
 
-            // Live Scan Console Stream
+            // Scan Console
             const scanConsole = document.getElementById('scan-log-console');
             const scanLastTime = document.getElementById('scan-last-time');
             const logs = data.scan_logs || [];
-            
             if (scanConsole && logs.length > 0) {
-                if (scanLastTime) {
-                    scanLastTime.innerText = `Останній аналіз: ${logs[0].time}`;
-                }
+                if (scanLastTime) scanLastTime.innerText = `Останній аналіз: ${logs[0].time}`;
                 scanConsole.innerHTML = logs.map(log => {
-                    const isAiLog = log.reason && log.reason.includes('DEEPSEEK');
-                    const sigColor = log.signal === 'BUY' ? '#48bb78' : (log.signal === 'REJECTED' ? '#f56565' : (log.signal === 'SELL' ? '#f56565' : '#a0aec0'));
+                    const isAiLog = log.reason && (log.reason.includes('DEEPSEEK') || log.reason.includes('GEMINI') || log.reason.includes('GPT'));
+                    const isTradeExec = log.reason && (log.reason.includes('SOLD') || log.reason.includes('BOUGHT'));
+                    const sigColor = log.signal === 'BUY' ? '#10b981' : (log.signal === 'REJECTED' ? '#f43f5e' : (log.signal === 'SELL' ? '#f43f5e' : '#8896b4'));
                     const priceFormatted = log.price < 0.01 ? log.price.toFixed(8) : log.price.toFixed(4);
-                    const bgStyle = isAiLog ? 'background: rgba(147, 51, 234, 0.15); border-left: 3px solid #a855f7; padding: 4px 8px; border-radius: 4px;' : 'border-bottom: 1px solid rgba(255,255,255,0.05); padding-bottom: 4px;';
-                    return `
-                        <div style="display: flex; gap: 10px; margin-bottom: 4px; align-items: center; flex-wrap: wrap; ${bgStyle}">
-                            <span style="color: #718096; font-size: 0.8rem;">[${log.time}]</span>
-                            <span style="color: #63b3ed; font-weight: bold;">🔎 ${log.symbol} ($${priceFormatted})</span>
-                            <span>| Вердикт: <strong style="color: ${sigColor};">${log.signal}</strong></span>
-                            <span style="color: #cbd5e0; flex: 1;">| ${log.reason}</span>
-                        </div>
-                    `;
+
+                    let bgStyle = 'border-bottom: 1px solid rgba(255,255,255,0.04); padding-bottom: 4px;';
+                    if (isTradeExec) {
+                        bgStyle = `background: ${log.signal === 'BUY' ? 'rgba(16,185,129,0.10)' : 'rgba(244,63,94,0.10)'}; border-left: 3px solid ${log.signal === 'BUY' ? '#10b981' : '#f43f5e'}; padding: 4px 8px; border-radius: 4px;`;
+                    } else if (isAiLog) {
+                        bgStyle = 'background: rgba(139, 92, 246, 0.12); border-left: 3px solid #8b5cf6; padding: 4px 8px; border-radius: 4px;';
+                    }
+                    return `<div style="display:flex;gap:8px;margin-bottom:3px;align-items:center;flex-wrap:wrap;${bgStyle}">
+                        <span style="color:#5c6a82;font-size:0.78rem;">[${log.time}]</span>
+                        <span style="color:#93bbfd;font-weight:700;">${log.symbol} ($${priceFormatted})</span>
+                        <span>| <strong style="color:${sigColor};">${log.signal}</strong></span>
+                        <span style="color:#8896b4;flex:1;">| ${log.reason}</span>
+                    </div>`;
                 }).join('');
             }
         } catch (err) {
@@ -446,6 +423,83 @@ function initApp() {
         }
     }
 
+    // ===== MULTI-POSITION RENDERING =====
+    function renderActivePositions(positions) {
+        const container = document.getElementById('active-positions-container');
+        const countBadge = document.getElementById('positions-count-badge');
+        if (!container) return;
+
+        if (countBadge) countBadge.innerText = positions.length;
+
+        if (!positions || positions.length === 0) {
+            container.innerHTML = '<div class="empty-positions">Немає відкритих угод — сканування ринку триває...</div>';
+            return;
+        }
+
+        container.innerHTML = '<div class="positions-grid">' + positions.map(pos => {
+            const currPrice = pos.current_price || pos.entry_price;
+            const pnl = ((currPrice - pos.entry_price) / pos.entry_price) * 100;
+            const pnlUsdt = (currPrice - pos.entry_price) * (pos.amount || 0);
+            const pnlClass = pnl >= 0 ? 'profit' : 'loss';
+            const pnlColor = pnl >= 0 ? 'var(--accent-green)' : 'var(--accent-red)';
+
+            const entryTimeVal = pos.entry_time || pos.timestamp;
+            const entryTimestamp = entryTimeVal ? (entryTimeVal > 1e11 ? entryTimeVal : entryTimeVal * 1000) : Date.now();
+            const holdMin = Math.max(0, (Date.now() - entryTimestamp) / (1000 * 60));
+            const holdStr = holdMin < 60 ? `${holdMin.toFixed(1)}хв` : `${(holdMin / 60).toFixed(1)}год`;
+
+            const posRsi = pos.rsi || 50;
+            const posTrend = pos.trend || '—';
+            const rsiColor = posRsi <= 30 ? '#10b981' : (posRsi >= 70 ? '#f43f5e' : '#93bbfd');
+            const trendColor = posTrend === 'BULLISH' ? '#10b981' : (posTrend === 'BEARISH' ? '#f43f5e' : '#8896b4');
+            const priceFmt = (p) => p < 0.01 ? p.toFixed(8) : p.toFixed(4);
+
+            return `
+            <div class="glass-card position-card ${pnlClass}">
+                <div class="position-card-header">
+                    <span class="symbol">📌 ${pos.symbol}</span>
+                    <span style="font-size:0.78rem;color:var(--text-muted);">⏱ ${holdStr}</span>
+                </div>
+                <div class="position-card-metrics">
+                    <div><span class="metric-label">К-сть:</span> <span class="metric-value">${(pos.amount || 0).toFixed(4)}</span></div>
+                    <div><span class="metric-label">Вхід:</span> <span class="metric-value">$${priceFmt(pos.entry_price)}</span></div>
+                    <div><span class="metric-label">Поточна:</span> <span class="metric-value">$${priceFmt(currPrice)}</span></div>
+                    <div><span class="metric-label">Order ID:</span> <span class="metric-value" style="font-family:monospace;font-size:0.75rem;">${pos.order_id || '—'}</span></div>
+                </div>
+                <div class="position-card-indicators">
+                    <span>RSI: <strong style="color:${rsiColor}">${posRsi.toFixed(1)}</strong></span>
+                    <span>Тренд: <strong style="color:${trendColor}">${posTrend}</strong></span>
+                    ${pos.ema_fast ? `<span>EMA20: <strong>$${priceFmt(pos.ema_fast)}</strong></span>` : ''}
+                    ${pos.ema_slow ? `<span>EMA50: <strong>$${priceFmt(pos.ema_slow)}</strong></span>` : ''}
+                </div>
+                <div class="position-card-footer">
+                    <span class="position-pnl" style="color:${pnlColor};">
+                        ${pnl >= 0 ? '+' : ''}${pnl.toFixed(2)}% (${pnlUsdt >= 0 ? '+' : ''}$${pnlUsdt.toFixed(4)})
+                    </span>
+                    <button class="btn btn-xs btn-danger close-pos-btn" data-symbol="${pos.symbol}">
+                        🔴 Закрити
+                    </button>
+                </div>
+            </div>`;
+        }).join('') + '</div>';
+
+        // Attach close handlers
+        container.querySelectorAll('.close-pos-btn').forEach(btn => {
+            btn.addEventListener('click', async () => {
+                const sym = btn.dataset.symbol;
+                if (confirm(`Закрити позицію ${sym}?`)) {
+                    await fetch('/api/control', {
+                        method: 'POST',
+                        headers: { 'Authorization': `Bearer ${getAuthToken()}`, 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ action: 'close_position', symbol: sym })
+                    });
+                    fetchStatus();
+                }
+            });
+        });
+    }
+
+    // ===== TRADE ACTIONS & ORDERS HISTORY =====
     async function fetchOrders() {
         try {
             const resp = await fetch('/api/orders', {
@@ -454,43 +508,70 @@ function initApp() {
             if (!resp.ok) return;
             const data = await resp.json();
 
-            const tbody = document.getElementById('orders-table-body');
-            if (!tbody) return;
-            const orders = Array.isArray(data) ? data : (data.order_history || []);
+            const tradeActions = data.trade_actions || [];
+            const aiVerdicts = data.ai_verdicts || [];
+            const listContainer = document.getElementById('trade-actions-list');
+            const tradeCount = document.getElementById('trade-actions-count');
+            const aiCount = document.getElementById('ai-verdicts-count');
 
-            if (orders.length === 0) {
-                tbody.innerHTML = `<tr><td colspan="7" class="text-center">Очікування першої угоди...</td></tr>`;
-                return;
+            if (tradeCount) tradeCount.innerText = tradeActions.length;
+            if (aiCount) aiCount.innerText = `${aiVerdicts.length} 🤖`;
+
+            if (!listContainer) return;
+
+            const priceFmt = (p) => (p && p < 0.01) ? p.toFixed(8) : (p || 0).toFixed(4);
+
+            let html = '';
+
+            // Render Trade Actions (BUY/SELL)
+            if (tradeActions.length === 0) {
+                html += '<div class="empty-positions" style="margin:0;border:none;">Очікування перших торгових дій...</div>';
+            } else {
+                html += tradeActions.map(ta => {
+                    const isBuy = ta.side === 'BUY';
+                    const isSell = ta.side === 'SELL';
+                    const rowClass = isBuy ? 'buy-action' : `sell-action${ta.pnl_pct > 0 ? ' profitable' : ''}`;
+                    const badgeClass = isBuy ? 'buy' : 'sell';
+                    const badgeIcon = isBuy ? '🟢' : '🔴';
+                    const pnlStr = isSell && ta.pnl_pct !== null && ta.pnl_pct !== undefined
+                        ? `<span class="trade-action-pnl" style="color:${ta.pnl_pct >= 0 ? '#10b981' : '#f43f5e'};">${ta.pnl_pct >= 0 ? '+' : ''}${ta.pnl_pct.toFixed(2)}%</span>`
+                        : '';
+
+                    return `<div class="trade-action-row ${rowClass}">
+                        <span class="trade-action-time">${ta.time || '—'}</span>
+                        <span class="trade-action-badge ${badgeClass}">${badgeIcon} ${ta.side}</span>
+                        <span class="trade-action-symbol">${ta.symbol || '—'}</span>
+                        <span class="trade-action-details">
+                            ${ta.amount ? ta.amount.toFixed(4) : '—'} × $${priceFmt(ta.price)}
+                            ${isSell && ta.entry_price ? ` | Entry: $${priceFmt(ta.entry_price)}` : ''}
+                        </span>
+                        ${pnlStr}
+                    </div>`;
+                }).join('');
             }
 
-            tbody.innerHTML = orders.map(ord => {
-                const dateStr = ord.time || (ord.timestamp ? new Date(ord.timestamp).toLocaleTimeString() : 'N/A');
-                const isReject = ord.status === 'REJECTED' || ord.side === 'reject';
-                const sideClass = isReject ? 'text-red' : (ord.side === 'buy' ? 'text-green' : 'text-red');
-                const badgeClass = isReject ? 'alert-danger' : 'badge-paper';
-                const statusLabel = isReject ? '🛑 REJECTED' : (ord.status || 'CLOSED');
-                const reasonText = ord.reason || '🟢 Виконано за алгоритмом';
-                const priceFormatted = ord.price ? (ord.price < 0.01 ? ord.price.toFixed(8) : ord.price.toFixed(4)) : '0.00';
-                const amountFormatted = ord.amount ? ord.amount.toFixed(4) : '-';
+            // Render AI Verdicts (compact, below trade actions)
+            if (aiVerdicts.length > 0) {
+                html += '<div style="margin-top:10px;padding-top:8px;border-top:1px solid rgba(255,255,255,0.06);font-size:0.72rem;color:var(--text-muted);margin-bottom:4px;">🤖 ШІ Вердикти</div>';
+                html += aiVerdicts.slice(0, 10).map(v => {
+                    const isConfirmed = v.status === 'CONFIRMED';
+                    const icon = isConfirmed ? '✅' : '🛑';
+                    return `<div class="trade-action-row ai-verdict" style="padding:5px 10px;font-size:0.76rem;">
+                        <span class="trade-action-time">${v.time || '—'}</span>
+                        <span class="trade-action-badge ai">🤖 AI</span>
+                        <span class="trade-action-symbol">${v.symbol || '—'}</span>
+                        <span class="trade-action-details" style="color:${isConfirmed ? '#86efac' : '#fca5a5'};">${icon} ${v.reason || ''}</span>
+                    </div>`;
+                }).join('');
+            }
 
-                return `
-                    <tr>
-                        <td>${dateStr}</td>
-                        <td><strong>${ord.symbol || 'N/A'}</strong></td>
-                        <td class="${sideClass}"><strong>${(ord.side || 'BUY').toUpperCase()}</strong></td>
-                        <td>$${priceFormatted}</td>
-                        <td>${amountFormatted}</td>
-                        <td><span class="badge ${badgeClass}" style="${isReject ? 'background: rgba(239,68,68,0.2); color: #f87171;' : ''}">${statusLabel}</span></td>
-                        <td style="font-size: 0.85rem; color: ${isReject ? '#f87171' : '#a0aec0'};">${reasonText}</td>
-                    </tr>
-                `;
-            }).join('');
+            listContainer.innerHTML = html;
         } catch (err) {
             console.error("Orders polling error:", err);
         }
     }
 
-    // Control Handlers
+    // ===== CONTROL HANDLERS =====
     document.getElementById('toggle-active-btn')?.addEventListener('click', async () => {
         const btn = document.getElementById('toggle-active-btn');
         const isCurrentlyActive = btn?.innerText.includes("працює");
@@ -619,25 +700,6 @@ function initApp() {
         fetchStatus();
     });
 
-    document.getElementById('exchange-select')?.addEventListener('change', async (e) => {
-        const exchange = e.target.value;
-        await fetch('/api/control', {
-            method: 'POST',
-            headers: { 'Authorization': `Bearer ${getAuthToken()}`, 'Content-Type': 'application/json' },
-            body: JSON.stringify({ action: 'set_exchange', exchange })
-        });
-        fetchStatus();
-    });
-
-    document.getElementById('toggle-execution-mode-btn')?.addEventListener('click', async () => {
-        await fetch('/api/control', {
-            method: 'POST',
-            headers: { 'Authorization': `Bearer ${getAuthToken()}`, 'Content-Type': 'application/json' },
-            body: JSON.stringify({ action: 'toggle_mode' })
-        });
-        fetchStatus();
-    });
-
     document.getElementById('toggle-sleep-btn')?.addEventListener('click', async () => {
         await fetch('/api/control', {
             method: 'POST',
@@ -658,18 +720,24 @@ function initApp() {
     });
 }
 
+// ===== TRADINGVIEW CHART =====
 let currentChartSymbol = 'SOL/USDT';
 let activeWatchlist = ['SOL/USDT', 'WLD/USDT', 'PUMP/USDT', 'PEPE/USDT', 'SHIB/USDT', 'CHIP/USDT', 'BIRB/USDT', 'BTC/USDT', 'ETH/USDT'];
 let tvWidgetInstance = null;
 let currentTvSymbol = '';
 
-function updateWatchlistBar(scannedLogs, activePosition) {
+function getTvExchangePrefix() {
+    const ex = (currentPlatform || 'bybit').toUpperCase();
+    return ex === 'BINANCE' ? 'BINANCE:' : 'BYBIT:';
+}
+
+function updateWatchlistBar(scannedLogs, activePositions) {
     const bar = document.getElementById('watchlist-bar');
     if (!bar) return;
 
     const symbolsSet = new Set(activeWatchlist);
-    if (activePosition && activePosition.symbol) {
-        symbolsSet.add(activePosition.symbol);
+    if (activePositions && activePositions.length > 0) {
+        activePositions.forEach(p => { if (p.symbol) symbolsSet.add(p.symbol); });
     }
     if (scannedLogs && scannedLogs.length > 0) {
         scannedLogs.forEach(l => { if (l.symbol && !l.symbol.includes('AUTO')) symbolsSet.add(l.symbol); });
@@ -678,13 +746,17 @@ function updateWatchlistBar(scannedLogs, activePosition) {
     const symbols = Array.from(symbolsSet).slice(0, 15);
     bar.innerHTML = '';
 
+    const activeSyms = new Set((activePositions || []).map(p => p.symbol));
+
     symbols.forEach(sym => {
         const btn = document.createElement('button');
         const isSelected = (sym === currentChartSymbol);
-        const isActivePos = (activePosition && activePosition.symbol === sym);
-        
-        let btnClass = isSelected ? 'btn btn-sm btn-primary' : 'btn btn-sm btn-outline';
-        if (isActivePos) btnClass = 'btn btn-sm btn-success';
+        const isActivePos = activeSyms.has(sym);
+
+        let btnClass = 'btn btn-sm ';
+        if (isSelected) btnClass += 'btn-primary';
+        else if (isActivePos) btnClass += 'btn-success';
+        else btnClass += 'btn-outline';
 
         btn.className = btnClass;
         btn.style.borderRadius = '20px';
@@ -692,11 +764,11 @@ function updateWatchlistBar(scannedLogs, activePosition) {
         btn.style.padding = '4px 14px';
         btn.style.fontSize = '0.8rem';
         btn.style.fontWeight = 'bold';
-        
+
         btn.innerHTML = `${isActivePos ? '📌 ' : ''}${sym}`;
         btn.onclick = () => {
             currentChartSymbol = sym;
-            updateWatchlistBar(scannedLogs, activePosition);
+            updateWatchlistBar(scannedLogs, activePositions);
             updateTradingViewChart(sym, true);
         };
         bar.appendChild(btn);
@@ -705,11 +777,12 @@ function updateWatchlistBar(scannedLogs, activePosition) {
 
 function updateTradingViewChart(symbolStr, forceUpdate = false) {
     if (typeof TradingView === 'undefined') return;
-    
+
     let cleanSym = (symbolStr || 'SOL/USDT').replace('/', '').toUpperCase();
     if (cleanSym.includes('AUTO')) cleanSym = 'SOLUSDT';
-    
-    const tvSymbol = `BYBIT:${cleanSym}`;
+
+    const prefix = getTvExchangePrefix();
+    const tvSymbol = `${prefix}${cleanSym}`;
     if (!forceUpdate && tvSymbol === currentTvSymbol && tvWidgetInstance) return;
 
     currentTvSymbol = tvSymbol;
@@ -725,7 +798,7 @@ function updateTradingViewChart(symbolStr, forceUpdate = false) {
             "theme": "dark",
             "style": "1",
             "locale": "uk",
-            "toolbar_bg": "#0f172a",
+            "toolbar_bg": "#0b1424",
             "enable_publishing": false,
             "allow_symbol_change": true,
             "container_id": "tradingview_chart_element"

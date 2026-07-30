@@ -62,11 +62,14 @@ class TradingBot:
         self.strategy = HybridStrategy()
         self.risk_manager = RiskManager()
         self.llm_analyst = LLMAnalyst()
-        self.current_position: Optional[Dict[str, Any]] = self._load_position()
+        self.active_positions: list = self._load_positions()
         self.latest_meta: Dict[str, Any] = {}
-        self.rejected_cooldowns: Dict[str, float] = {}  # Symbol -> expiry timestamp
+        self.active_position_metas: Dict[str, Dict[str, Any]] = {}
+        self.rejected_cooldowns: Dict[str, float] = {}
         self.scan_logs = deque(maxlen=30)
         self.ai_verdicts = deque(maxlen=30)
+        self.trade_actions = deque(maxlen=50)
+        self.max_concurrent_positions = 3
         
         # Trading active flag
         self.trading_active = True
@@ -77,38 +80,55 @@ class TradingBot:
             get_balance_fn=self.get_balance_str
         )
 
-    def _load_position(self) -> Optional[Dict[str, Any]]:
+    def _load_positions(self) -> list:
         pos_file = os.path.join(os.path.dirname(__file__), "data", "position.json")
         if os.path.exists(pos_file):
             try:
                 with open(pos_file, 'r', encoding='utf-8') as f:
-                    pos = json.load(f)
-                    if pos and isinstance(pos, dict) and pos.get('amount', 0) > 0:
+                    data = json.load(f)
+                    if isinstance(data, list):
+                        positions = data
+                    elif isinstance(data, dict) and data.get('amount', 0) > 0:
+                        positions = [data]
+                    else:
+                        positions = []
+
+                    valid = []
+                    for pos in positions:
+                        if not isinstance(pos, dict) or pos.get('amount', 0) <= 0:
+                            continue
                         is_pos_paper = pos.get('is_paper', True)
                         if is_pos_paper and not config.paper_trading:
-                            logger.warning(f"⚠️ Demo/Paper position ({pos.get('symbol')}) ignored because bot is running in LIVE mode.")
-                            return None
+                            logger.warning(f"⚠️ Paper position ({pos.get('symbol')}) ignored — bot is in LIVE mode.")
+                            continue
                         if 'entry_time' not in pos or not pos['entry_time']:
                             pos['entry_time'] = os.path.getmtime(pos_file)
-                        logger.info(f"📌 Loaded active open position from position.json: {pos.get('symbol')} (Paper: {is_pos_paper}, Entry Time: {time.strftime('%H:%M:%S', time.localtime(pos['entry_time']))})")
-                        return pos
+                        logger.info(f"📌 Loaded position: {pos.get('symbol')} (Paper: {is_pos_paper})")
+                        valid.append(pos)
+                    return valid
             except Exception as e:
                 logger.error(f"Error loading position.json: {e}")
-        return None
+        return []
 
-    def _save_position(self, pos: Optional[Dict[str, Any]]) -> None:
+    def _save_positions(self) -> None:
         pos_dir = os.path.join(os.path.dirname(__file__), "data")
         os.makedirs(pos_dir, exist_ok=True)
         pos_file = os.path.join(pos_dir, "position.json")
         try:
-            if pos:
-                pos['is_paper'] = config.paper_trading
-                if 'entry_time' not in pos or not pos['entry_time']:
-                    pos['entry_time'] = time.time()
+            for p in self.active_positions:
+                p['is_paper'] = config.paper_trading
+                if 'entry_time' not in p or not p['entry_time']:
+                    p['entry_time'] = time.time()
             with open(pos_file, 'w', encoding='utf-8') as f:
-                json.dump(pos or {}, f, indent=2)
+                json.dump(self.active_positions, f, indent=2)
         except Exception as e:
             logger.error(f"Error saving position.json: {e}")
+
+    def _find_position(self, symbol: str) -> Optional[Dict[str, Any]]:
+        for p in self.active_positions:
+            if p.get('symbol') == symbol:
+                return p
+        return None
 
     def get_bot_status_str(self) -> str:
         meta = self.latest_meta
@@ -117,21 +137,24 @@ class TradingBot:
         trend = meta.get('trend', 'UNKNOWN')
 
         pos_str = "None"
-        if self.current_position:
-            entry = self.current_position['entry_price']
-            amt = self.current_position['amount']
-            pnl_pct = ((price - entry) / entry) * 100 if price > 0 else 0.0
-            pos_str = f"{amt:.4f} @ ${entry:.2f} (PnL: {pnl_pct:+.2f}%)"
+        if self.active_positions:
+            parts = []
+            for p in self.active_positions:
+                entry = p['entry_price']
+                amt = p['amount']
+                pnl_pct = ((price - entry) / entry) * 100 if price > 0 else 0.0
+                parts.append(f"{p['symbol']}: {amt:.4f} @ ${entry:.2f} (PnL: {pnl_pct:+.2f}%)")
+            pos_str = '\n  '.join(parts)
 
         return (
-            f"📊 *BYBIT BOT STATUS*\n"
+            f"📊 *BOT STATUS ({config.active_exchange.upper()})*\n"
             f"• Mode: `{'PAPER TRADING' if config.paper_trading else 'LIVE'}`\n"
             f"• Symbol: `{config.symbol}` ({config.timeframe})\n"
             f"• Last Price: `${price:.2f}`\n"
             f"• RSI (14): `{rsi:.1f}`\n"
             f"• Trend: `{trend}`\n"
             f"• LLM Filter: `{'ENABLED (' + config.llm_provider.upper() + ')' if config.use_llm_confirmation else 'DISABLED'}`\n"
-            f"• Active Position: `{pos_str}`"
+            f"• Active Positions ({len(self.active_positions)}): `{pos_str}`"
         )
 
     def get_balance_str(self) -> str:
@@ -181,11 +204,10 @@ class TradingBot:
                 else:
                     symbols_to_scan = [config.symbol]
 
-                # Ensure active position symbol is always included in scan list for continuous SL/TP monitoring
-                if self.current_position and 'symbol' in self.current_position:
-                    pos_sym = self.current_position['symbol']
-                    if pos_sym not in symbols_to_scan:
-                        symbols_to_scan.insert(0, pos_sym)
+                # Ensure all active position symbols are in scan list for SL/TP monitoring
+                for pos in self.active_positions:
+                    if pos.get('symbol') and pos['symbol'] not in symbols_to_scan:
+                        symbols_to_scan.insert(0, pos['symbol'])
 
                 # Filter out symbols currently in Cooldown after LLM rejection
                 now = time.time()
@@ -202,14 +224,14 @@ class TradingBot:
 
                     try:
                         df = self.exchange.fetch_ohlcv(sym, config.timeframe, limit=100)
-                        pos_for_sym = self.current_position if (self.current_position and self.current_position.get('symbol') == sym) else None
+                        pos_for_sym = self._find_position(sym)
                         signal, reason, meta = self.strategy.analyze(df, pos_for_sym)
                         meta['signal'] = signal
                         meta['reason'] = reason
                         meta['symbol'] = sym
                         self.latest_meta = meta
                         if pos_for_sym:
-                            self.active_position_meta = meta
+                            self.active_position_metas[sym] = meta
 
                         scan_entry = {
                             'time': time.strftime("%H:%M:%S"),
@@ -223,18 +245,43 @@ class TradingBot:
                         self.scan_logs.appendleft(scan_entry)
                         logger.info(f"[{sym} ${meta.get('price', 0):.4f}] Signal: {signal} | Reason: {reason}")
 
-                        if signal == 'BUY' and (self.current_position is None or self.current_position.get('symbol') != sym):
+                        can_open_new = len(self.active_positions) < self.max_concurrent_positions
+                        if signal == 'BUY' and can_open_new and not pos_for_sym:
                             if best_buy_opportunity is None or meta.get('rsi', 100) < best_buy_opportunity['meta'].get('rsi', 100):
                                 best_buy_opportunity = {'symbol': sym, 'meta': meta, 'reason': reason}
-                        elif signal == 'SELL' and self.current_position is not None:
-                            amount = self.current_position['amount']
-                            entry_p = self.current_position['entry_price']
+                        elif signal == 'SELL' and pos_for_sym:
+                            amount = pos_for_sym['amount']
+                            entry_p = pos_for_sym['entry_price']
                             curr_p = meta['price']
                             pnl_pct = ((curr_p - entry_p) / entry_p) * 100
 
                             logger.info(f"Executing SELL for {sym} ({amount:.4f} coins @ ${curr_p:.2f}). Reason: {reason}")
-                            self.exchange.execute_smart_order('sell', amount, curr_p, symbol=sym)
-                            
+                            orders = self.exchange.execute_smart_order('sell', amount, curr_p, symbol=sym)
+
+                            self.trade_actions.appendleft({
+                                'timestamp': int(time.time() * 1000),
+                                'time': time.strftime("%H:%M:%S"),
+                                'symbol': sym,
+                                'side': 'SELL',
+                                'amount': amount,
+                                'price': curr_p,
+                                'entry_price': entry_p,
+                                'pnl_pct': round(pnl_pct, 2),
+                                'pnl_usdt': round((curr_p - entry_p) * amount, 4),
+                                'reason': reason,
+                                'status': 'FILLED'
+                            })
+
+                            self.scan_logs.appendleft({
+                                'time': time.strftime("%H:%M:%S"),
+                                'symbol': sym,
+                                'price': curr_p,
+                                'signal': 'SELL',
+                                'reason': f"🔴 SOLD {amount:.4f} @ ${curr_p:.4f} | PnL: {pnl_pct:+.2f}% | {reason}",
+                                'rsi': meta.get('rsi', 0.0),
+                                'trend': meta.get('trend', 'UNKNOWN')
+                            })
+
                             await self.telegram.send_alert(
                                 f"🔴 *SELL ORDER EXECUTED (Quant Engine)*\n"
                                 f"• Pair: `{sym}`\n"
@@ -243,8 +290,9 @@ class TradingBot:
                                 f"• Execution: `Limit Offset + Iceberg`\n"
                                 f"• Reason: {reason}"
                             )
-                            self.current_position = None
-                            self._save_position(None)
+                            self.active_positions = [p for p in self.active_positions if p.get('symbol') != sym]
+                            self.active_position_metas.pop(sym, None)
+                            self._save_positions()
                             break
                     except Exception as scan_err:
                         logger.error(f"Error scanning {sym}: {scan_err}")
@@ -258,21 +306,24 @@ class TradingBot:
                     pnl_pct = 0.0
                     stagnant_sym = None
 
-                    if self.current_position is not None:
-                        pos = self.current_position
-                        stagnant_sym = pos.get('symbol')
-                        if stagnant_sym != best_buy_opportunity['symbol']:
+                    if self.active_positions:
+                        # Find the most stagnant position for auto-swap (only if at max capacity)
+                        for pos in self.active_positions:
+                            stagnant_sym = pos.get('symbol')
+                            if stagnant_sym == best_buy_opportunity['symbol']:
+                                continue
                             entry_p = pos.get('entry_price', 1.0)
                             entry_t = pos.get('entry_time', now)
                             pos_age_min = (now - entry_t) / 60.0
-                            curr_p = self.latest_meta.get('price', entry_p) if self.latest_meta.get('symbol') == stagnant_sym else entry_p
+                            pos_meta = self.active_position_metas.get(stagnant_sym, {})
+                            curr_p = pos_meta.get('price', entry_p)
                             pnl_pct = ((curr_p - entry_p) / entry_p)
-                            
-                            # Rotation rule: Position held >= 2 min OR PnL is negative/stagnant [-2.0%, +0.8%]
+
                             if pos_age_min >= 2.0 or pnl_pct < 0 or (-0.020 <= pnl_pct <= 0.008):
                                 should_auto_swap = True
                                 stagnant_info = {'symbol': stagnant_sym, 'amount': pos['amount'], 'price': curr_p, 'age': pos_age_min, 'pnl': pnl_pct}
-                                logger.info(f"🔄 Candidate swap detected: {stagnant_sym} (Age: {pos_age_min:.1f}m, PnL: {pnl_pct*100:+.2f}%). Evaluating DeepSeek Auto-Swap into {best_buy_opportunity['symbol']}...")
+                                logger.info(f"🔄 Candidate swap: {stagnant_sym} (Age: {pos_age_min:.1f}m, PnL: {pnl_pct*100:+.2f}%) → {best_buy_opportunity['symbol']}")
+                                break
 
                     target_sym = best_buy_opportunity['symbol']
                     target_meta = best_buy_opportunity['meta']
@@ -314,20 +365,45 @@ class TradingBot:
                         self.rejected_cooldowns[target_sym] = time.time() + (15 * 60)
                         logger.warning(f"🛑 BUY signal for {target_sym} rejected by LLM Analyst (15m Cooldown activated): {llm_reason}")
                         await self.telegram.send_alert(f"⚠️ *BUY Signal REJECTED by LLM ({target_sym})* [15m Cooldown Activated]: {llm_reason}")
-                        # Execute Auto-Swap exit of stagnant position if needed
-                        if should_auto_swap and stagnant_info:
+                        # Execute Auto-Swap exit of stagnant position if needed (only when at max capacity)
+                        if should_auto_swap and stagnant_info and len(self.active_positions) >= self.max_concurrent_positions:
                             logger.info(f"🔄 Executing AUTO-SWAP exit for stagnant position {stagnant_info['symbol']}...")
                             swap_successful = False
                             try:
                                 self.exchange.execute_smart_order('sell', stagnant_info['amount'], stagnant_info['price'], symbol=stagnant_info['symbol'])
+
+                                self.trade_actions.appendleft({
+                                    'timestamp': int(time.time() * 1000),
+                                    'time': time.strftime("%H:%M:%S"),
+                                    'symbol': stagnant_info['symbol'],
+                                    'side': 'SELL',
+                                    'amount': stagnant_info['amount'],
+                                    'price': stagnant_info['price'],
+                                    'pnl_pct': round(stagnant_info['pnl'] * 100, 2),
+                                    'pnl_usdt': round(stagnant_info['pnl'] * stagnant_info['amount'] * stagnant_info['price'], 4),
+                                    'reason': f"🔄 AUTO-SWAP → {target_sym}",
+                                    'status': 'FILLED'
+                                })
+
+                                self.scan_logs.appendleft({
+                                    'time': time.strftime("%H:%M:%S"),
+                                    'symbol': stagnant_info['symbol'],
+                                    'price': stagnant_info['price'],
+                                    'signal': 'SELL',
+                                    'reason': f"🔄 AUTO-SWAP SOLD {stagnant_info['amount']:.4f} @ ${stagnant_info['price']:.4f} → {target_sym}",
+                                    'rsi': 0.0,
+                                    'trend': 'UNKNOWN'
+                                })
+
                                 await self.telegram.send_alert(
                                     f"🔄 *AUTO-SWAP POSITION ROTATION EXECUTED*\n"
                                     f"• Closed Stagnant Pair: `{stagnant_info['symbol']}`\n"
                                     f"• Stagnation Hold Time: `{stagnant_info['age']:.0f} min` (PnL: `{stagnant_info['pnl']*100:+.2f}%`)\n"
                                     f"• Reason: Swapping capital into hot momentum coin `{target_sym}`!"
                                 )
-                                self.current_position = None
-                                self._save_position(None)
+                                self.active_positions = [p for p in self.active_positions if p.get('symbol') != stagnant_info['symbol']]
+                                self.active_position_metas.pop(stagnant_info['symbol'], None)
+                                self._save_positions()
                                 swap_successful = True
                             except Exception as swap_sell_err:
                                 logger.error(f"Auto-Swap sell error for {stagnant_info['symbol']}: {swap_sell_err}")
@@ -340,12 +416,13 @@ class TradingBot:
                                 })
                                 if "apiKey" in str(swap_sell_err):
                                     await self.telegram.send_alert(
-                                        f"⚠️ *Помилка авторизації Bybit/Binance*:\n"
+                                        f"⚠️ *Помилка авторизації {config.active_exchange.upper()}*:\n"
                                         f"Для виконання торгівлі у LIVE режимі перевірте API-ключі у файлі `.env`!"
                                     )
 
-                            if not swap_successful and self.current_position is not None:
-                                continue  # Skip entering new position if closing old position failed
+                        # Only proceed to buy if we have room (either from swap or under max)
+                        if len(self.active_positions) >= self.max_concurrent_positions:
+                            continue
 
                         try:
                             bal = self.exchange.fetch_balance()
@@ -353,46 +430,75 @@ class TradingBot:
                         except Exception as bal_err:
                             logger.error(f"Error fetching balance for trade execution: {bal_err}")
                             if "apiKey" in str(bal_err):
-                                await self.telegram.send_alert("⚠️ *LIVE Mode Error*: Потрібно вказати `BYBIT_API_KEY` у файлі `.env`!")
+                                await self.telegram.send_alert(f"⚠️ *LIVE Mode Error*: Потрібно вказати API ключі у файлі `.env`!")
                             continue
-                        
+
+                        # Split available capital across remaining position slots
+                        slots_remaining = self.max_concurrent_positions - len(self.active_positions)
+                        alloc_usdt = usdt_free / max(slots_remaining, 1)
+
                         is_allowed, amount, risk_reason = self.risk_manager.calculate_position_size(
-                            usdt_free, target_meta['price']
+                            alloc_usdt, target_meta['price']
                         )
 
                         if is_allowed:
                             try:
                                 logger.info(f"Executing BUY for {target_sym} via Quant Engine: {risk_reason}")
                                 orders = self.exchange.execute_smart_order('buy', amount, target_meta['price'], symbol=target_sym)
-                                
+
                                 verdict_record['amount'] = amount
-                                self.current_position = {
+                                new_pos = {
                                     'symbol': target_sym,
                                     'entry_price': target_meta['price'],
                                     'amount': amount,
                                     'entry_time': time.time(),
                                     'order_id': orders[0].get('id') if orders else 'N/A'
                                 }
-                                self._save_position(self.current_position)
-                                
+                                self.active_positions.append(new_pos)
+                                self._save_positions()
+
+                                self.trade_actions.appendleft({
+                                    'timestamp': int(time.time() * 1000),
+                                    'time': time.strftime("%H:%M:%S"),
+                                    'symbol': target_sym,
+                                    'side': 'BUY',
+                                    'amount': amount,
+                                    'price': target_meta['price'],
+                                    'pnl_pct': None,
+                                    'pnl_usdt': None,
+                                    'reason': target_reason,
+                                    'status': 'FILLED'
+                                })
+
+                                self.scan_logs.appendleft({
+                                    'time': time.strftime("%H:%M:%S"),
+                                    'symbol': target_sym,
+                                    'price': target_meta['price'],
+                                    'signal': 'BUY',
+                                    'reason': f"🟢 BOUGHT {amount:.4f} @ ${target_meta['price']:.4f} | {target_reason}",
+                                    'rsi': target_meta.get('rsi', 0.0),
+                                    'trend': target_meta.get('trend', 'UNKNOWN')
+                                })
+
                                 await self.telegram.send_alert(
                                     f"🟢 *BUY ORDER EXECUTED (Quant Engine)*\n"
                                     f"• Pair: `{target_sym}`\n"
                                     f"• Price: `${target_meta['price']:.2f}`\n"
                                     f"• Amount: `{amount:.4f}`\n"
+                                    f"• Active Positions: `{len(self.active_positions)}/{self.max_concurrent_positions}`\n"
                                     f"• Execution: `Limit Offset + Iceberg ({config.iceberg_slices} slices)`\n"
                                     f"• Strategy Reason: {target_reason}\n"
                                     f"• {llm_reason}"
                                 )
                             except Exception as order_err:
                                 verdict_record['status'] = 'EXCHANGE_REJECTED'
-                                verdict_record['reason'] += f" | ⚠️ Bybit Error: {order_err}"
-                                logger.error(f"Bybit Order Execution Error for {target_sym}: {order_err}")
-                                await self.telegram.send_alert(f"⚠️ *Bybit Order Rejected*: {order_err}")
-                            else:
-                                verdict_record['status'] = 'RISK_REJECTED'
-                                verdict_record['reason'] += f" | ⚠️ RiskManager: {risk_reason}"
-                                logger.warning(f"BUY rejected by RiskManager for {target_sym}: {risk_reason}")
+                                verdict_record['reason'] += f" | ⚠️ Exchange Error: {order_err}"
+                                logger.error(f"Exchange Order Execution Error for {target_sym}: {order_err}")
+                                await self.telegram.send_alert(f"⚠️ *Exchange Order Rejected*: {order_err}")
+                        else:
+                            verdict_record['status'] = 'RISK_REJECTED'
+                            verdict_record['reason'] += f" | ⚠️ RiskManager: {risk_reason}"
+                            logger.warning(f"BUY rejected by RiskManager for {target_sym}: {risk_reason}")
 
             except Exception as e:
                 logger.error(f"Error in bot loop: {e}")
