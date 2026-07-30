@@ -165,8 +165,8 @@ Technical Indicators:
 - Market Trend: {meta.get('trend', 'UNKNOWN')}
 
 Rules:
-1. If PnL is positive (>= +0.10%) and RSI is weakening or price is consolidating/stagnant after 5 minutes, recommend SELL to lock in profit immediately.
-2. If position is stagnant in loss or flat (PnL < 0.0%) after 5 minutes and trend is failing, recommend SELL to free up capital for hot coins.
+1. If PnL is positive (>= +0.20%, covering Bybit fees) and RSI is weakening or price is consolidating/stagnant after 5 minutes, recommend SELL to lock in net profit.
+2. If position is open for 5+ minutes and price fails to grow above +0.20% (PnL < +0.20%), recommend SELL to free up capital immediately for hot momentum coins.
 3. If strong bullish momentum continues, recommend HOLD.
 4. Respond ONLY in valid JSON with format:
 {{"action": "SELL" or "HOLD", "reason": "Short 1-sentence Ukrainian explanation"}}"""
