@@ -236,6 +236,129 @@ class TradingBot:
             logger.debug(f"BTC shield check skipped: {e}")
         return False
 
+    def check_position_health(self, symbol: str, position: Dict[str, Any], meta: Dict[str, Any]) -> Optional[str]:
+        """Decides whether an open position is still worth holding.
+
+        Entry conditions can go stale while a position is open (trend flips, price
+        goes nowhere for hours, RSI overheats). Returns a human-readable exit reason
+        when the position should be liquidated early, or None to keep holding.
+        """
+        if not getattr(config, 'use_position_health_check', True):
+            return None
+
+        entry_price = float(position.get('entry_price', 0) or 0)
+        current_price = float(meta.get('price', 0) or 0)
+        if entry_price <= 0 or current_price <= 0:
+            return None
+
+        # Grace period: never flip-flop inside the first couple of minutes, otherwise
+        # intra-candle noise alone can open and immediately close a position.
+        age_minutes = (time.time() - float(position.get('entry_time', time.time()))) / 60.0
+        if age_minutes < config.health_min_hold_minutes:
+            return None
+
+        pnl_pct = ((current_price - entry_price) / entry_price) * 100.0
+        ema_fast = float(meta.get('ema_fast', 0) or 0)
+        ema_slow = float(meta.get('ema_slow', 0) or 0)
+        rsi = float(meta.get('rsi', 50) or 50)
+
+        # 1. Trend flipped bearish — the reason we entered no longer holds.
+        if ema_fast > 0 and ema_slow > 0 and ema_fast < ema_slow:
+            return (f"🚨 EMERGENCY EXIT: Тренд перевернувся на BEARISH "
+                    f"(EMA{config.ema_fast}={ema_fast:.6f} < EMA{config.ema_slow}={ema_slow:.6f}), PnL: {pnl_pct:+.2f}%")
+
+        # 2. Position went nowhere for hours — free up the capital.
+        if age_minutes / 60.0 > config.health_stale_hours and abs(pnl_pct) < config.health_stale_pnl_pct:
+            return (f"⏰ TIMEOUT EXIT: Позиція зависла {age_minutes / 60.0:.1f} год "
+                    f"без руху (PnL: {pnl_pct:+.2f}%)")
+
+        # 3. RSI overheated while in profit — bank it before the pullback.
+        if rsi > config.health_rsi_overheat and pnl_pct > 0:
+            return f"💰 PROFIT PROTECTION: RSI перегрітий ({rsi:.1f}), фіксуємо прибуток {pnl_pct:+.2f}%"
+
+        return None
+
+    async def close_position_market(self, symbol: str, reason: str, cooldown_minutes: int = 0) -> tuple:
+        """Sells an open position on the exchange and drops it from tracking.
+
+        Single path used by strategy SELL signals, emergency exits and the dashboard's
+        manual close, so a closed position always means a real order was submitted.
+        Returns (success: bool, message: str).
+        """
+        position = self._find_position(symbol)
+        if not position:
+            return False, f"No active position found for {symbol}"
+
+        amount = float(position.get('amount', 0) or 0)
+        entry_price = float(position.get('entry_price', 0) or 0)
+        meta = self.active_position_metas.get(symbol, {})
+        current_price = float(meta.get('price', 0) or 0)
+
+        if current_price <= 0:
+            try:
+                ticker = self.exchange.fetch_ticker(symbol)
+                current_price = float(ticker.get('last') or ticker.get('close') or entry_price)
+            except Exception as e:
+                logger.warning(f"Could not fetch exit price for {symbol}: {e}")
+                current_price = entry_price
+
+        pnl_pct = ((current_price - entry_price) / entry_price) * 100.0 if entry_price > 0 else 0.0
+
+        logger.info(f"Executing SELL for {symbol} ({amount:.4f} coins @ ${current_price:.6f}). Reason: {reason}")
+        try:
+            self.exchange.execute_smart_order('sell', amount, current_price, symbol=symbol)
+            status = 'FILLED'
+            error_msg = None
+        except Exception as order_err:
+            status = 'EXCHANGE_REJECTED'
+            error_msg = str(order_err)
+            logger.error(f"SELL order rejected for {symbol}: {order_err}")
+
+        self.trade_actions.appendleft({
+            'timestamp': int(time.time() * 1000),
+            'time': time.strftime("%H:%M:%S"),
+            'symbol': symbol,
+            'side': 'SELL',
+            'amount': amount,
+            'price': current_price,
+            'entry_price': entry_price,
+            'pnl_pct': round(pnl_pct, 2),
+            'pnl_usdt': round((current_price - entry_price) * amount, 4),
+            'reason': reason if not error_msg else f"{reason} | ⚠️ {error_msg}",
+            'status': status
+        })
+
+        if status == 'EXCHANGE_REJECTED':
+            # Keep tracking it — the coins are still on the books.
+            return False, f"Exchange rejected SELL for {symbol}: {error_msg}"
+
+        self.scan_logs.appendleft({
+            'time': time.strftime("%H:%M:%S"),
+            'symbol': symbol,
+            'price': current_price,
+            'signal': 'SELL',
+            'reason': f"🔴 SOLD {amount:.4f} @ ${current_price:.6f} | PnL: {pnl_pct:+.2f}% | {reason}",
+            'rsi': meta.get('rsi', 0.0),
+            'trend': meta.get('trend', 'UNKNOWN')
+        })
+
+        if cooldown_minutes > 0:
+            self.rejected_cooldowns[symbol] = time.time() + (cooldown_minutes * 60)
+            logger.info(f"🔒 {symbol} заблоковано на {cooldown_minutes} хв після виходу.")
+
+        self.active_positions = [p for p in self.active_positions if p.get('symbol') != symbol]
+        self.active_position_metas.pop(symbol, None)
+        self._save_positions()
+
+        await self.telegram.send_alert(
+            f"🔴 *SELL ORDER EXECUTED*\n"
+            f"• Pair: `{symbol}`\n"
+            f"• Exit Price: `${current_price:.6f}` (Entry: `${entry_price:.6f}`)\n"
+            f"• PnL: `{pnl_pct:+.2f}%`\n"
+            f"• Reason: {reason}"
+        )
+        return True, f"Position {symbol} sold at ${current_price:.6f} (PnL: {pnl_pct:+.2f}%)"
+
     async def run_loop(self):
         logger.info("🚀 Starting Bybit Trading Bot loop...")
         await self.telegram.send_alert(
@@ -326,60 +449,32 @@ class TradingBot:
                         self.scan_logs.appendleft(scan_entry)
                         logger.info(f"[{sym} ${meta.get('price', 0):.4f}] Signal: {signal} | Reason: {reason}")
 
+                        # Adaptive position management: bail out early if the conditions we
+                        # entered on no longer hold, before TP/SL has a chance to trigger.
+                        if pos_for_sym and signal != 'SELL':
+                            health_reason = self.check_position_health(sym, pos_for_sym, meta)
+                            if health_reason:
+                                logger.warning(f"[{sym}] {health_reason}")
+                                await self.close_position_market(
+                                    sym, health_reason,
+                                    cooldown_minutes=config.emergency_exit_cooldown_minutes
+                                )
+                                break
+
                         can_open_new = len(self.active_positions) < self.max_concurrent_positions
                         if signal == 'BUY' and can_open_new and not pos_for_sym:
                             if best_buy_opportunity is None or meta.get('rsi', 100) < best_buy_opportunity['meta'].get('rsi', 100):
                                 best_buy_opportunity = {'symbol': sym, 'meta': meta, 'reason': reason}
                         elif signal == 'SELL' and pos_for_sym:
-                            amount = pos_for_sym['amount']
-                            entry_p = pos_for_sym['entry_price']
-                            curr_p = meta['price']
-                            pnl_pct = ((curr_p - entry_p) / entry_p) * 100
-
-                            logger.info(f"Executing SELL for {sym} ({amount:.4f} coins @ ${curr_p:.2f}). Reason: {reason}")
-                            orders = self.exchange.execute_smart_order('sell', amount, curr_p, symbol=sym)
-
-                            # If Stop-Loss triggered, activate 15-minute symbol cooldown to prevent re-entering a dumping coin
-                            if "STOP LOSS" in reason.upper() or "STOP_LOSS" in reason.upper():
-                                cooldown_until = time.time() + (15 * 60)
-                                self.rejected_cooldowns[sym] = cooldown_until
+                            # Stop-loss exits get a shorter cooldown than emergency exits so the
+                            # bot does not immediately re-enter a coin that is actively dumping.
+                            is_stop_loss = "STOP LOSS" in reason.upper() or "STOP_LOSS" in reason.upper()
+                            if is_stop_loss:
                                 logger.warning(f"🛑 STOP-LOSS HIT on {sym}. Symbol cooldown activated for 15 minutes.")
-
-                            self.trade_actions.appendleft({
-                                'timestamp': int(time.time() * 1000),
-                                'time': time.strftime("%H:%M:%S"),
-                                'symbol': sym,
-                                'side': 'SELL',
-                                'amount': amount,
-                                'price': curr_p,
-                                'entry_price': entry_p,
-                                'pnl_pct': round(pnl_pct, 2),
-                                'pnl_usdt': round((curr_p - entry_p) * amount, 4),
-                                'reason': reason,
-                                'status': 'FILLED'
-                            })
-
-                            self.scan_logs.appendleft({
-                                'time': time.strftime("%H:%M:%S"),
-                                'symbol': sym,
-                                'price': curr_p,
-                                'signal': 'SELL',
-                                'reason': f"🔴 SOLD {amount:.4f} @ ${curr_p:.4f} | PnL: {pnl_pct:+.2f}% | {reason}",
-                                'rsi': meta.get('rsi', 0.0),
-                                'trend': meta.get('trend', 'UNKNOWN')
-                            })
-
-                            await self.telegram.send_alert(
-                                f"🔴 *SELL ORDER EXECUTED (Quant Engine)*\n"
-                                f"• Pair: `{sym}`\n"
-                                f"• Exit Price: `${curr_p:.2f}` (Entry: `${entry_p:.2f}`)\n"
-                                f"• PnL: `{pnl_pct:+.2f}%`\n"
-                                f"• Execution: `Limit Offset + Iceberg`\n"
-                                f"• Reason: {reason}"
+                            await self.close_position_market(
+                                sym, reason,
+                                cooldown_minutes=15 if is_stop_loss else 0
                             )
-                            self.active_positions = [p for p in self.active_positions if p.get('symbol') != sym]
-                            self.active_position_metas.pop(sym, None)
-                            self._save_positions()
                             break
                     except Exception as scan_err:
                         logger.error(f"Error scanning {sym}: {scan_err}")

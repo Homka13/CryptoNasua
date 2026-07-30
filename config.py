@@ -82,6 +82,14 @@ class TradingConfig:
     grid_levels: int = 3
     grid_step_pct: float = 0.01  # 1% price step between grid levels
 
+    # Adaptive Position Management (Stale / Trend-Reversal Emergency Exits)
+    use_position_health_check: bool = os.getenv("USE_POSITION_HEALTH_CHECK", "true").lower() == "true"
+    health_min_hold_minutes: float = 2.0      # Grace period before emergency exits may fire
+    health_stale_hours: float = 4.0            # Flat-position timeout
+    health_stale_pnl_pct: float = 0.5          # |PnL| under this counts as "no movement"
+    health_rsi_overheat: float = 75.0          # Take profit early above this RSI
+    emergency_exit_cooldown_minutes: int = 30  # Re-entry block after an emergency exit
+
     # Quant Execution Algorithms (Anti-Slippage & Smart Slicing)
     use_limit_offset: bool = True
     limit_offset_pct: float = 0.0015   # 0.15% limit price offset tolerance

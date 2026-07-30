@@ -335,56 +335,29 @@ class DashboardServer:
                             pos_to_close = p
                             break
                     if pos_to_close:
-                        logger.info(f"🔴 Position manually closed via Web Dashboard for {target_symbol}")
-                        # Record trade action for manual close
-                        entry_p = pos_to_close.get('entry_price', 0)
-                        pos_meta = self.bot.active_position_metas.get(target_symbol, {})
-                        curr_p = pos_meta.get('price', entry_p)
-                        pnl_pct = ((curr_p - entry_p) / entry_p) * 100 if entry_p > 0 else 0
-                        self.bot.trade_actions.appendleft({
-                            'timestamp': int(time.time() * 1000),
-                            'time': time.strftime("%H:%M:%S"),
-                            'symbol': target_symbol,
-                            'side': 'SELL',
-                            'amount': pos_to_close.get('amount', 0),
-                            'price': curr_p,
-                            'entry_price': entry_p,
-                            'pnl_pct': round(pnl_pct, 2),
-                            'pnl_usdt': round((curr_p - entry_p) * pos_to_close.get('amount', 0), 4),
-                            'reason': '🔴 Вручну через Dashboard',
-                            'status': 'FILLED'
-                        })
-                        self.bot.active_positions = [p for p in positions if p.get('symbol') != target_symbol]
-                        self.bot.active_position_metas.pop(target_symbol, None)
-                        self.bot._save_positions()
-                        return web.json_response({'success': True, 'message': f'Position {target_symbol} closed successfully'})
+                        logger.info(f"🔴 Manual close requested via Web Dashboard for {target_symbol}")
+                        ok, message = await self.bot.close_position_market(
+                            target_symbol, '🔴 Вручну через Dashboard'
+                        )
+                        if not ok:
+                            return web.json_response({'success': False, 'error': message}, status=400)
+                        return web.json_response({'success': True, 'message': message})
                     return web.json_response({'success': False, 'error': f'No active position found for {target_symbol}'}, status=400)
                 else:
                     if positions:
-                        logger.info(f"🔴 All positions manually closed via Web Dashboard ({len(positions)} positions)")
-                        for p in positions:
-                            entry_p = p.get('entry_price', 0)
-                            sym = p.get('symbol', '')
-                            pos_meta = self.bot.active_position_metas.get(sym, {})
-                            curr_p = pos_meta.get('price', entry_p)
-                            pnl_pct = ((curr_p - entry_p) / entry_p) * 100 if entry_p > 0 else 0
-                            self.bot.trade_actions.appendleft({
-                                'timestamp': int(time.time() * 1000),
-                                'time': time.strftime("%H:%M:%S"),
-                                'symbol': sym,
-                                'side': 'SELL',
-                                'amount': p.get('amount', 0),
-                                'price': curr_p,
-                                'entry_price': entry_p,
-                                'pnl_pct': round(pnl_pct, 2),
-                                'pnl_usdt': round((curr_p - entry_p) * p.get('amount', 0), 4),
-                                'reason': '🔴 Вручну через Dashboard (всі)',
-                                'status': 'FILLED'
-                            })
-                        self.bot.active_positions = []
-                        self.bot.active_position_metas = {}
-                        self.bot._save_positions()
-                        return web.json_response({'success': True, 'message': f'All {len(positions)} positions closed'})
+                        logger.info(f"🔴 Manual close-all requested via Web Dashboard ({len(positions)} positions)")
+                        sold, failed = [], []
+                        for sym in [p.get('symbol', '') for p in list(positions)]:
+                            ok, message = await self.bot.close_position_market(
+                                sym, '🔴 Вручну через Dashboard (всі)'
+                            )
+                            (sold if ok else failed).append(sym if ok else message)
+                        if failed and not sold:
+                            return web.json_response({'success': False, 'error': '; '.join(failed)}, status=400)
+                        msg = f'Sold {len(sold)} position(s)'
+                        if failed:
+                            msg += f'; {len(failed)} failed: ' + '; '.join(failed)
+                        return web.json_response({'success': True, 'message': msg})
                     return web.json_response({'success': False, 'error': 'No active positions to close'}, status=400)
             elif action == 'set_exchange':
                 ex_name = body.get('exchange', 'bybit').lower()
