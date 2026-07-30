@@ -64,6 +64,7 @@ class TradingBot:
         self.risk_manager = RiskManager()
         self.llm_analyst = LLMAnalyst()
         self.active_positions: list = self._load_positions()
+        self._sync_wallet_positions()
         self.latest_meta: Dict[str, Any] = {}
         self.active_position_metas: Dict[str, Dict[str, Any]] = {}
         self.rejected_cooldowns: Dict[str, float] = {}
@@ -110,6 +111,53 @@ class TradingBot:
             except Exception as e:
                 logger.error(f"Error loading position.json: {e}")
         return []
+
+    def _sync_wallet_positions(self) -> None:
+        """Picks up pre-existing non-USDT wallet holdings (e.g. leftover dust) not yet
+        tracked in position.json and registers them as managed positions, so the normal
+        SELL logic (RSI overbought / TP / SL) can evaluate and liquidate them."""
+        if config.paper_trading:
+            return
+        try:
+            balance = self.exchange.fetch_balance()
+        except Exception as e:
+            logger.warning(f"Could not sync wallet positions: {e}")
+            return
+
+        tracked_symbols = {p.get('symbol') for p in self.active_positions}
+        ignore_coins = {'USDT', 'USDC', 'USD'}
+        min_sellable_usdt = 5.0  # Bybit/Binance spot MIN_NOTIONAL floor
+
+        for coin, info in balance.items():
+            if not isinstance(info, dict) or coin.upper() in ignore_coins:
+                continue
+            free_amount = float(info.get('free', 0) or 0)
+            if free_amount <= 0:
+                continue
+            symbol = f"{coin}/USDT"
+            if symbol in tracked_symbols:
+                continue
+            try:
+                ticker = self.exchange.fetch_ticker(symbol)
+                price = float(ticker.get('last') or ticker.get('close') or 0)
+            except Exception:
+                continue
+            if price <= 0:
+                continue
+            value_usdt = free_amount * price
+            if value_usdt < min_sellable_usdt:
+                continue
+            self.active_positions.append({
+                'symbol': symbol,
+                'amount': free_amount,
+                'entry_price': price,
+                'highest_price': price,
+                'is_paper': False,
+                'entry_time': time.time(),
+            })
+            logger.info(f"📦 Synced existing wallet holding as managed position: {symbol} ({free_amount:.4f} ≈ ${value_usdt:.2f})")
+
+        self._save_positions()
 
     def _save_positions(self) -> None:
         pos_dir = os.path.join(os.path.dirname(__file__), "data")
