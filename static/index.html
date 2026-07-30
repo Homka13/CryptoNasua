@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>CryptoNasua — Private Trading Dashboard</title>
-    <link rel="stylesheet" href="/static/style.css?v=20260730_v5">
+    <link rel="stylesheet" href="/static/style.css?v=20260730_v6">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
@@ -148,6 +148,14 @@
                         <span>Режим виконання:</span>
                         <button id="toggle-execution-mode-btn" class="btn btn-sm btn-outline">🧪 Демо-Торгівля</button>
                     </div>
+
+                    <div class="control-row">
+                        <span>Тільки моніторинг (без купівлі):</span>
+                        <label class="switch" title="Бот продовжує сканувати ринок і керувати відкритими позиціями (стоп-лос, тейк-профіт, екстрений вихід), але не відкриває нових">
+                            <input type="checkbox" id="monitor-only-toggle">
+                            <span class="switch-slider"></span>
+                        </label>
+                    </div>
                 </div>
 
                 <div class="control-group">
@@ -256,6 +264,6 @@
         </section>
     </div>
 
-    <script src="/static/app.js?v=20260730_v32"></script>
+    <script src="/static/app.js?v=20260730_v33"></script>
 </body>
 </html>

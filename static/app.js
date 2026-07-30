@@ -1,5 +1,16 @@
 let currentPlatform = 'bybit';
 
+// Prices are shown exactly as the exchange reports them. Fixed 4-decimal rounding hid the
+// real fill price (0.015896 rendered as 0.0159), so keep every significant digit and only
+// drop trailing zeros.
+function fmtPrice(p) {
+    const n = Number(p);
+    if (p === null || p === undefined || !isFinite(n)) return '—';
+    if (n === 0) return '0';
+    const s = Math.abs(n) < 1e-4 ? n.toFixed(12) : n.toFixed(8);
+    return s.replace(/(\.\d*?[1-9])0+$/, '$1').replace(/\.0+$/, '');
+}
+
 function initApp() {
     const loginModal = document.getElementById('login-modal');
     const dashboard = document.getElementById('dashboard');
@@ -316,6 +327,11 @@ function initApp() {
             }
 
             // Sleep button
+            // Reflect monitor-only state from the server, but never fight the user mid-click.
+            const monToggle = document.getElementById('monitor-only-toggle');
+            if (monToggle && !monToggle.disabled) {
+                monToggle.checked = !!data.monitor_only;
+            }
             const sleepBtn = document.getElementById('toggle-sleep-btn');
             if (sleepBtn) {
                 if (data.prevent_sleep) {
@@ -348,8 +364,8 @@ function initApp() {
             // Mode badge
             const modeBadge = document.getElementById('mode-badge');
             if (modeBadge) {
-                modeBadge.innerText = data.mode;
-                modeBadge.className = isPaper ? 'badge badge-paper' : 'badge badge-live';
+                modeBadge.innerText = data.monitor_only ? `${data.mode} · 👁 ТІЛЬКИ МОНІТОРИНГ` : data.mode;
+                modeBadge.className = (isPaper || data.monitor_only) ? 'badge badge-paper' : 'badge badge-live';
                 modeBadge.style.display = 'inline-block';
             }
 
@@ -447,7 +463,6 @@ function initApp() {
             const posTrend = pos.trend || '—';
             const rsiColor = posRsi <= 30 ? '#10b981' : (posRsi >= 70 ? '#f43f5e' : '#93bbfd');
             const trendColor = posTrend === 'BULLISH' ? '#10b981' : (posTrend === 'BEARISH' ? '#f43f5e' : '#8896b4');
-            const priceFmt = (p) => p < 0.01 ? p.toFixed(8) : p.toFixed(4);
 
             return `
             <div class="glass-card position-card ${pnlClass}">
@@ -457,15 +472,15 @@ function initApp() {
                 </div>
                 <div class="position-card-metrics">
                     <div><span class="metric-label">К-сть:</span> <span class="metric-value">${(pos.amount || 0).toFixed(4)}</span></div>
-                    <div><span class="metric-label">Вхід:</span> <span class="metric-value">$${priceFmt(pos.entry_price)}</span></div>
-                    <div><span class="metric-label">Поточна:</span> <span class="metric-value">$${priceFmt(currPrice)}</span></div>
+                    <div><span class="metric-label">Вхід:</span> <span class="metric-value">$${fmtPrice(pos.entry_price)}</span></div>
+                    <div><span class="metric-label">Поточна:</span> <span class="metric-value">$${fmtPrice(currPrice)}</span></div>
                     <div><span class="metric-label">Order ID:</span> <span class="metric-value" style="font-family:monospace;font-size:0.75rem;">${pos.order_id || '—'}</span></div>
                 </div>
                 <div class="position-card-indicators">
                     <span>RSI: <strong style="color:${rsiColor}">${posRsi.toFixed(1)}</strong></span>
                     <span>Тренд: <strong style="color:${trendColor}">${posTrend}</strong></span>
-                    ${pos.ema_fast ? `<span>EMA20: <strong>$${priceFmt(pos.ema_fast)}</strong></span>` : ''}
-                    ${pos.ema_slow ? `<span>EMA50: <strong>$${priceFmt(pos.ema_slow)}</strong></span>` : ''}
+                    ${pos.ema_fast ? `<span>EMA20: <strong>$${fmtPrice(pos.ema_fast)}</strong></span>` : ''}
+                    ${pos.ema_slow ? `<span>EMA50: <strong>$${fmtPrice(pos.ema_slow)}</strong></span>` : ''}
                 </div>
                 <div class="position-card-footer">
                     <span class="position-pnl" style="color:${pnlColor};">
@@ -509,7 +524,6 @@ function initApp() {
         if (countBadge) countBadge.innerText = holdings.length;
 
         container.innerHTML = holdings.map(h => {
-            const priceFmt = (v) => v < 0.01 ? v.toFixed(8) : v.toFixed(4);
             const statusHtml = h.is_position
                 ? '<span class="trade-action-badge buy">В ПОЗИЦІЇ</span>'
                 : (h.tradable
@@ -518,11 +532,34 @@ function initApp() {
             return `
             <div class="wallet-holding-row">
                 <span class="wallet-holding-symbol">${h.symbol}</span>
-                <span class="wallet-holding-amount">${priceFmt(h.amount)}</span>
+                <span class="wallet-holding-amount">${fmtPrice(h.amount)}</span>
                 <span class="wallet-holding-value">$${h.usd_value.toFixed(2)}</span>
                 ${statusHtml}
             </div>`;
         }).join('');
+    }
+
+    // ===== MONITOR-ONLY MODE =====
+    const monitorOnlyToggle = document.getElementById('monitor-only-toggle');
+    if (monitorOnlyToggle) {
+        monitorOnlyToggle.addEventListener('change', async () => {
+            monitorOnlyToggle.disabled = true;
+            try {
+                const resp = await fetch('/api/control', {
+                    method: 'POST',
+                    headers: { 'Authorization': `Bearer ${getAuthToken()}`, 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ action: 'toggle_monitor_only' })
+                });
+                const data = await resp.json();
+                if (data.success) monitorOnlyToggle.checked = data.monitor_only;
+            } catch (err) {
+                // Revert the visual state if the request never landed.
+                monitorOnlyToggle.checked = !monitorOnlyToggle.checked;
+            } finally {
+                monitorOnlyToggle.disabled = false;
+                fetchStatus();
+            }
+        });
     }
 
     // ===== DUST CONVERSION =====
@@ -586,7 +623,6 @@ function initApp() {
 
             if (!listContainer) return;
 
-            const priceFmt = (p) => (p && p < 0.01) ? p.toFixed(8) : (p || 0).toFixed(4);
 
             let html = '';
 
@@ -609,8 +645,8 @@ function initApp() {
                         <span class="trade-action-badge ${badgeClass}">${badgeIcon} ${ta.side}</span>
                         <span class="trade-action-symbol">${ta.symbol || '—'}</span>
                         <span class="trade-action-details">
-                            ${ta.amount ? ta.amount.toFixed(4) : '—'} × $${priceFmt(ta.price)}
-                            ${isSell && ta.entry_price ? ` | Entry: $${priceFmt(ta.entry_price)}` : ''}
+                            ${ta.amount ? ta.amount.toFixed(4) : '—'} × $${fmtPrice(ta.price)}
+                            ${isSell && ta.entry_price ? ` | Entry: $${fmtPrice(ta.entry_price)}` : ''}
                         </span>
                         ${pnlStr}
                     </div>`;

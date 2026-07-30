@@ -90,6 +90,11 @@ class TradingConfig:
     health_rsi_overheat: float = 75.0          # Take profit early above this RSI
     emergency_exit_cooldown_minutes: int = 30  # Re-entry block after an emergency exit
 
+    # Monitor-only mode: keep scanning and keep managing open positions (SL/TP, health
+    # exits) but never open a new one. Unlike pausing, exits stay armed — a paused bot
+    # would sit through a reversal holding whatever it already owns.
+    monitor_only: bool = os.getenv("MONITOR_ONLY", "false").lower() == "true"
+
     # Quant Execution Algorithms (Anti-Slippage & Smart Slicing)
     use_limit_offset: bool = True
     limit_offset_pct: float = 0.0015   # 0.15% limit price offset tolerance
@@ -103,7 +108,8 @@ class TradingConfig:
                 "deepseek_api_key": self.deepseek_api_key,
                 "llm_api_key": self.llm_api_key,
                 "use_llm_confirmation": self.use_llm_confirmation,
-                "trading_mode": self.trading_mode
+                "trading_mode": self.trading_mode,
+                "monitor_only": self.monitor_only
             }
             with open("data/config_cache.json", "w", encoding="utf-8") as f:
                 json.dump(data, f, indent=2)
@@ -122,6 +128,8 @@ class TradingConfig:
                         self.use_llm_confirmation = data["use_llm_confirmation"]
                     if "trading_mode" in data:
                         self.trading_mode = data["trading_mode"]
+                    if "monitor_only" in data:
+                        self.monitor_only = data["monitor_only"]
         except Exception as e:
             pass
 

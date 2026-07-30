@@ -239,6 +239,7 @@ class DashboardServer:
             'trading_mode_display': config.trading_mode_display,
             'min_llm_confidence': config.min_llm_confidence,
             'prevent_sleep': getattr(config, 'prevent_sleep', True),
+            'monitor_only': getattr(config, 'monitor_only', False),
             'active_positions': active_positions_payload,
             'active_position': active_pos_payload,
             'wallet_holdings': wallet_holdings,
@@ -359,6 +360,13 @@ class DashboardServer:
                             msg += f'; {len(failed)} failed: ' + '; '.join(failed)
                         return web.json_response({'success': True, 'message': msg})
                     return web.json_response({'success': False, 'error': 'No active positions to close'}, status=400)
+            elif action == 'toggle_monitor_only':
+                config.monitor_only = not getattr(config, 'monitor_only', False)
+                config.save_persisted_config()
+                logger.info(
+                    f"👁 Monitor-Only Mode {'ENABLED (no new entries)' if config.monitor_only else 'DISABLED (entries allowed)'} via Dashboard"
+                )
+                return web.json_response({'success': True, 'monitor_only': config.monitor_only})
             elif action == 'convert_dust':
                 logger.info("♻️ Dust conversion requested via Web Dashboard")
                 result = await asyncio.get_event_loop().run_in_executor(None, self.bot.convert_dust_to_usdt)

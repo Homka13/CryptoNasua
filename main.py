@@ -475,6 +475,7 @@ class TradingBot:
                     logger.warning("📉 [BTC GRAVITY SHIELD]: BTC is dumping on 5m timeframe. Altcoin BUY signals paused to prevent fakeouts.")
 
                 best_buy_opportunity = None
+                suppressed_buys = []
 
                 for sym in active_scan_symbols:
                     if not self.telegram.is_active or not getattr(self, 'trading_active', False):
@@ -515,7 +516,13 @@ class TradingBot:
                                 )
                                 break
 
-                        can_open_new = len(self.active_positions) < self.max_concurrent_positions
+                        if signal == 'BUY' and not pos_for_sym and getattr(config, 'monitor_only', False):
+                            suppressed_buys.append(sym)
+
+                        can_open_new = (
+                            len(self.active_positions) < self.max_concurrent_positions
+                            and not getattr(config, 'monitor_only', False)
+                        )
                         if signal == 'BUY' and can_open_new and not pos_for_sym:
                             if best_buy_opportunity is None or meta.get('rsi', 100) < best_buy_opportunity['meta'].get('rsi', 100):
                                 best_buy_opportunity = {'symbol': sym, 'meta': meta, 'reason': reason}
@@ -532,6 +539,22 @@ class TradingBot:
                             break
                     except Exception as scan_err:
                         logger.error(f"Error scanning {sym}: {scan_err}")
+
+                # Surface suppressed entries once per cycle — otherwise monitor-only mode
+                # looks identical to "the strategy found nothing".
+                if suppressed_buys:
+                    note = f"👁 MONITOR ONLY: вхід заблоковано ({', '.join(suppressed_buys[:5])}"
+                    note += f" +{len(suppressed_buys) - 5} ще)" if len(suppressed_buys) > 5 else ")"
+                    logger.info(note)
+                    self.scan_logs.appendleft({
+                        'time': time.strftime("%H:%M:%S"),
+                        'symbol': suppressed_buys[0],
+                        'price': 0.0,
+                        'signal': 'HOLD',
+                        'reason': note,
+                        'rsi': 0.0,
+                        'trend': 'MONITOR'
+                    })
 
                 # Process Best Buy Opportunity / Auto-Swap Position Rotation
                 should_auto_swap = False
