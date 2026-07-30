@@ -117,8 +117,8 @@ class BybitExchangeAdapter(BaseExchangeAdapter):
         if target_sym == "AUTO":
             target_sym = "SHIB/USDT"
 
-        offset_pct = 0.0005 if side == 'buy' else -0.0005
-        limit_price = current_price * (1 + offset_pct)
+        # Use exact current market price for buy orders to strictly respect Bybit price collar
+        limit_price = current_price if side == 'buy' else current_price * 0.9995
 
         total_value = amount * current_price
         if total_value < 6.0 or config.iceberg_slices <= 1:

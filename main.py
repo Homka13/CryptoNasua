@@ -223,7 +223,7 @@ class TradingBot:
                             pnl_pct = ((curr_p - entry_p) / entry_p) * 100
 
                             logger.info(f"Executing SELL for {sym} ({amount:.4f} coins @ ${curr_p:.2f}). Reason: {reason}")
-                            self.exchange.execute_smart_order('sell', amount, curr_p)
+                            self.exchange.execute_smart_order('sell', amount, curr_p, symbol=sym)
                             
                             await self.telegram.send_alert(
                                 f"🔴 *SELL ORDER EXECUTED (Quant Engine)*\n"
@@ -291,7 +291,7 @@ class TradingBot:
                         if is_allowed:
                             try:
                                 logger.info(f"Executing BUY for {target_sym} via Quant Engine: {risk_reason}")
-                                orders = self.exchange.execute_smart_order('buy', amount, target_meta['price'])
+                                orders = self.exchange.execute_smart_order('buy', amount, target_meta['price'], symbol=target_sym)
                                 
                                 verdict_record['amount'] = amount
                                 self.current_position = {
