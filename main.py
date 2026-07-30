@@ -675,9 +675,19 @@ class TradingBot:
                         await self.telegram.send_alert(f"⚠️ *BUY Signal REJECTED by LLM ({target_sym})* [15m Cooldown Activated]: {llm_reason}")
                         continue
 
-                    # Execute Auto-Swap exit of stagnant position if needed (only when at max capacity)
-                    if should_auto_swap and stagnant_info and len(self.active_positions) >= self.max_concurrent_positions:
-                        logger.info(f"🔄 Executing AUTO-SWAP exit for stagnant position {stagnant_info['symbol']}...")
+                    # Check if balance is low or position limit reached
+                    try:
+                        curr_bal = self.exchange.fetch_balance()
+                        curr_usdt = curr_bal.get('USDT', {}).get('free', 0.0)
+                    except Exception:
+                        curr_usdt = 0.0
+
+                    need_swap_for_balance = (curr_usdt < getattr(config, 'min_order_usdt', 5.50))
+                    at_max_positions = (len(self.active_positions) >= self.max_concurrent_positions)
+
+                    # Execute Auto-Swap exit of stagnant position if needed (when at max capacity or low balance)
+                    if should_auto_swap and stagnant_info and (at_max_positions or need_swap_for_balance):
+                        logger.info(f"🔄 Executing AUTO-SWAP exit for stagnant position {stagnant_info['symbol']} → {target_sym}...")
                         swap_successful = False
                         try:
                             self.exchange.execute_smart_order('sell', stagnant_info['amount'], stagnant_info['price'], symbol=stagnant_info['symbol'])
@@ -715,6 +725,7 @@ class TradingBot:
                             self.active_position_metas.pop(stagnant_info['symbol'], None)
                             self._save_positions()
                             swap_successful = True
+                            await asyncio.sleep(1.2)  # Give CEX 1.2s to settle sold USDT into available balance
                         except Exception as swap_sell_err:
                             logger.error(f"Auto-Swap sell error for {stagnant_info['symbol']}: {swap_sell_err}")
                             self.scan_logs.appendleft({
@@ -734,14 +745,19 @@ class TradingBot:
                     if len(self.active_positions) >= self.max_concurrent_positions:
                         continue
 
-                    try:
-                        bal = self.exchange.fetch_balance()
-                        usdt_free = bal.get('USDT', {}).get('free', 0.0)
-                    except Exception as bal_err:
-                        logger.error(f"Error fetching balance for trade execution: {bal_err}")
-                        if "apiKey" in str(bal_err):
-                            await self.telegram.send_alert(f"⚠️ *LIVE Mode Error*: Потрібно вказати API ключі у файлі `.env`!")
-                        continue
+                    usdt_free = 0.0
+                    for bal_attempt in range(3):
+                        try:
+                            bal = self.exchange.fetch_balance()
+                            usdt_free = bal.get('USDT', {}).get('free', 0.0)
+                            if usdt_free >= 5.0 or bal_attempt == 2:
+                                break
+                            await asyncio.sleep(0.8)
+                        except Exception as bal_err:
+                            logger.error(f"Error fetching balance for trade execution: {bal_err}")
+                            if "apiKey" in str(bal_err):
+                                await self.telegram.send_alert(f"⚠️ *LIVE Mode Error*: Потрібно вказати API ключі у файлі `.env`!")
+                            await asyncio.sleep(0.5)
 
                     # Size against the whole free balance. The RiskManager's 45% rule already
                     # leaves room for further entries, and it shrinks naturally as the balance
