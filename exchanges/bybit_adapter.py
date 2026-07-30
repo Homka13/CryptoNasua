@@ -93,7 +93,21 @@ class BybitExchangeAdapter(BaseExchangeAdapter):
                 logger.warning(f"⚠️ Bybit Order cost (${order_cost:.2f}) < min_cost (${min_cost:.2f}). Adjusting amount to {required_amount:.4f}")
                 amount = required_amount
 
-            return self.exchange.create_order(symbol, order_type, side, amount, price)
+            # Apply exchange price and amount precision formatting
+            formatted_amount = float(self.exchange.amount_to_precision(symbol, amount))
+            formatted_price = float(self.exchange.price_to_precision(symbol, price)) if price > 0 else None
+
+            if order_type == 'market' or formatted_price is None:
+                return self.exchange.create_order(symbol, 'market', side, formatted_amount)
+            
+            try:
+                return self.exchange.create_order(symbol, order_type, side, formatted_amount, formatted_price)
+            except Exception as limit_err:
+                err_msg = str(limit_err)
+                if "170193" in err_msg or "higher than" in err_msg.lower() or "lower than" in err_msg.lower():
+                    logger.warning(f"⚠️ Bybit Price Collar limit hit ({err_msg}). Falling back to MARKET order for {symbol}...")
+                    return self.exchange.create_order(symbol, 'market', side, formatted_amount)
+                raise limit_err
         except Exception as e:
             logger.error(f"Bybit Order creation error for {symbol}: {e}")
             raise e
