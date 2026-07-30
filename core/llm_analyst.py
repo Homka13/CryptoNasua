@@ -54,13 +54,15 @@ Analyze the following technical setup for pair: {symbol} on {timeframe} timefram
 - Market Trend: {meta.get('trend', 'UNKNOWN')}
 - Recent 5 Candle Closes: {meta.get('last_5_closes', [])}
 - Micro-Trend 5-Candle Slope: {meta.get('slope_5_candles_pct', 0.0):+.2f}%
+- 1-Hour Trend Price Change: {meta.get('change_1h_pct', 0.0):+.2f}%
+- EMA 20 Slope (1 Hour): {meta.get('ema20_slope_pct', 0.0):+.2f}%
 - Last 3 Candles Consecutive RED (Falling): {meta.get('last_3_red', False)}
 - Strategy Signal Reason: {strategy_reason}
 - Trading Mode: {config.trading_mode_display} (Min Confidence Required: {config.min_llm_confidence}%)
 
 Strict Rules:
-1. REJECT if the micro-trend is falling (last 3 candles consecutive RED or negative slope) without a green reversal candle. Do NOT buy coins that are slumping/creeping down in a micro-downtrend!
-2. Confirm ONLY if price is rebounding off a strong support level or forming a clear bullish reversal pattern with a green candle.
+1. REJECT if the micro-trend or 1-hour trend is falling (change_1h_pct < -0.20%, EMA20 slope negative, or last 3 candles RED) without a clear green reversal candle. Do NOT buy coins that are slumping or creeping down!
+2. Confirm ONLY if price is rebounding off a strong support level with a green candle or forming a strong bullish breakout pattern.
 3. Respond ONLY in valid JSON with format:
 {{"verdict": "CONFIRM" or "REJECT", "confidence": 0-100, "reason": "Short 1-sentence Ukrainian explanation"}}"""
 

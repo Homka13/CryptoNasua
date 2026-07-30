@@ -65,6 +65,14 @@ class HybridStrategy:
         slope_5_candles_pct = ((current_price - price_5_ago) / price_5_ago) * 100.0 if price_5_ago > 0 else 0.0
         last_3_red = all(float(r['close']) < float(r['open']) for _, r in last_5.tail(3).iterrows())
 
+        # 1-hour trend change (4 candles of 15m)
+        price_1h_ago = float(df_calc['close'].iloc[-5]) if len(df_calc) >= 5 else current_price
+        change_1h_pct = ((current_price - price_1h_ago) / price_1h_ago) * 100.0 if price_1h_ago > 0 else 0.0
+
+        # EMA20 slope over last 4 candles
+        ema20_1h_ago = float(df_calc['ema_fast'].iloc[-5]) if len(df_calc) >= 5 else ema_fast_val
+        ema20_slope_pct = ((ema_fast_val - ema20_1h_ago) / ema20_1h_ago) * 100.0 if ema20_1h_ago > 0 else 0.0
+
         metadata = {
             'price': current_price,
             'rsi': rsi_val,
@@ -76,6 +84,8 @@ class HybridStrategy:
             'is_stable': is_stable,
             'last_5_closes': last_5_closes,
             'slope_5_candles_pct': round(slope_5_candles_pct, 2),
+            'change_1h_pct': round(change_1h_pct, 2),
+            'ema20_slope_pct': round(ema20_slope_pct, 2),
             'last_3_red': last_3_red
         }
 
@@ -147,10 +157,10 @@ class HybridStrategy:
                 metadata['skip_llm'] = False  # Mandatory DeepSeek LLM Audit
                 return 'BUY', f'⚡ ЛОВЕЦЬ ВІДСКОКІВ [Ultra-Dip Reversal] (RSI: {rsi_val:.1f} < 25, Пробій нижньої Боллінджера + Зелена свічка розвороту)', metadata
 
-        # Do not allow standard dip buys if the micro-trend is slumping (3 consecutive red candles or strong downward slope)
-        if last_3_red and slope_5_candles_pct < -0.20:
+        # Do not allow standard dip buys if 1-hour trend is slumping (change_1h_pct < -0.30% or last 3 candles red)
+        if (last_3_red and slope_5_candles_pct < -0.10) or change_1h_pct < -0.30 or ema20_slope_pct < -0.20:
             regime_tag = " [STABLE]" if is_stable else ""
-            return 'HOLD', f'Scanning market (RSI: {rsi_val:.1f}, Micro-Downtrend 3 Red Candles Slope: {slope_5_candles_pct:+.2f}%){regime_tag}', metadata
+            return 'HOLD', f'Scanning market (RSI: {rsi_val:.1f}, 1h Downtrend Change: {change_1h_pct:+.2f}%, EMA20 Slope: {ema20_slope_pct:+.2f}%){regime_tag}', metadata
 
         # Standard Bullish Trend Oversold Entry
         if is_oversold and is_bullish_trend:
