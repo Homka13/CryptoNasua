@@ -410,17 +410,21 @@ function initApp() {
             updateWatchlistBar(data.scan_logs, positions);
             updateTradingViewChart(currentChartSymbol, false);
 
-            // Controls state — sync resume/pause buttons
+            // Controls state — sync resume/pause buttons (both header and drawer)
             const btnResume = document.getElementById('btn-resume');
             const btnPause = document.getElementById('btn-pause');
-            if (btnResume && btnPause) {
-                if (data.is_active) {
-                    btnResume.className = 'btn btn-sm btn-success';
-                    btnPause.className = 'btn btn-sm btn-outline';
-                } else {
-                    btnResume.className = 'btn btn-sm btn-outline';
-                    btnPause.className = 'btn btn-sm btn-danger';
-                }
+            const btnResumeHeader = document.getElementById('btn-resume-header');
+            const btnPauseHeader = document.getElementById('btn-pause-header');
+            if (data.is_active) {
+                if (btnResume) btnResume.className = 'btn btn-sm btn-success';
+                if (btnPause) btnPause.className = 'btn btn-sm btn-outline';
+                if (btnResumeHeader) btnResumeHeader.className = 'btn btn-sm btn-success';
+                if (btnPauseHeader) btnPauseHeader.className = 'btn btn-sm btn-outline';
+            } else {
+                if (btnResume) btnResume.className = 'btn btn-sm btn-outline';
+                if (btnPause) btnPause.className = 'btn btn-sm btn-danger';
+                if (btnResumeHeader) btnResumeHeader.className = 'btn btn-sm btn-outline';
+                if (btnPauseHeader) btnPauseHeader.className = 'btn btn-sm btn-danger';
             }
 
             // Scan Console
@@ -836,6 +840,44 @@ function initApp() {
 
     document.getElementById('download-csv-btn')?.addEventListener('click', handleCsvDownload);
     document.getElementById('download-csv-btn-card')?.addEventListener('click', handleCsvDownload);
+
+    // ===== SLIDE-OVER SETTINGS DRAWER HANDLERS =====
+    const drawer = document.getElementById('settings-drawer');
+    const backdrop = document.getElementById('drawer-backdrop');
+    const openDrawerBtn = document.getElementById('open-settings-drawer-btn');
+    const closeDrawerBtn = document.getElementById('close-settings-drawer-btn');
+
+    function openSettingsDrawer() {
+        if (drawer) drawer.classList.add('open');
+        if (backdrop) backdrop.classList.add('open');
+    }
+
+    function closeSettingsDrawer() {
+        if (drawer) drawer.classList.remove('open');
+        if (backdrop) backdrop.classList.remove('open');
+    }
+
+    if (openDrawerBtn) openDrawerBtn.addEventListener('click', openSettingsDrawer);
+    if (closeDrawerBtn) closeDrawerBtn.addEventListener('click', closeSettingsDrawer);
+    if (backdrop) backdrop.addEventListener('click', closeSettingsDrawer);
+
+    document.getElementById('btn-resume-header')?.addEventListener('click', async () => {
+        await fetch('/api/control', {
+            method: 'POST',
+            headers: { 'Authorization': `Bearer ${getAuthToken()}`, 'Content-Type': 'application/json' },
+            body: JSON.stringify({ action: 'resume' })
+        });
+        fetchStatus();
+    });
+
+    document.getElementById('btn-pause-header')?.addEventListener('click', async () => {
+        await fetch('/api/control', {
+            method: 'POST',
+            headers: { 'Authorization': `Bearer ${getAuthToken()}`, 'Content-Type': 'application/json' },
+            body: JSON.stringify({ action: 'pause' })
+        });
+        fetchStatus();
+    });
 
     document.getElementById('btn-resume')?.addEventListener('click', async () => {
         await fetch('/api/control', {

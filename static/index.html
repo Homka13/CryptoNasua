@@ -78,6 +78,17 @@
                 </button>
             </div>
 
+            <!-- Quick Controls & Open Settings Drawer Button -->
+            <div style="display: flex; gap: 10px; align-items: center;">
+                <div class="btn-group" style="margin: 0;">
+                    <button id="btn-resume-header" class="btn btn-sm btn-success" style="font-size:0.78rem; padding: 6px 12px;">▶️ Запустити</button>
+                    <button id="btn-pause-header" class="btn btn-sm btn-outline" style="font-size:0.78rem; padding: 6px 12px;">⏸️ Пауза</button>
+                </div>
+                <button id="open-settings-drawer-btn" class="btn btn-sm btn-primary" style="font-size: 0.82rem; padding: 6px 14px; display: flex; align-items: center; gap: 6px; box-shadow: 0 0 12px rgba(59, 130, 246, 0.4);">
+                    ⚙️ Налаштування & Управління
+                </button>
+            </div>
+
             <div class="user-profile">
                 <span id="user-email-display" class="user-email">yuhim1308@gmail.com</span>
                 <button id="logout-btn" class="btn btn-sm btn-outline">Вийти</button>
@@ -215,80 +226,86 @@
             </div>
         </section>
 
-        <!-- Controls Section -->
-        <section class="glass-card section-card controls-section" style="margin-bottom: 24px;">
-            <h3>⚙️ Управління Ботом</h3>
-            <div class="controls-grid">
-                <div class="control-group">
-                    <div class="control-row">
-                        <span>Статус торгівлі:</span>
-                        <div class="btn-group">
-                            <button id="btn-resume" class="btn btn-sm btn-success">▶️ Запустити</button>
-                            <button id="btn-pause" class="btn btn-sm btn-danger">⏸️ Пауза</button>
+        <!-- SLIDE-OVER SETTINGS DRAWER MODAL -->
+        <div id="drawer-backdrop" class="drawer-backdrop"></div>
+        <div id="settings-drawer" class="settings-drawer">
+            <div class="drawer-header">
+                <h3>⚙️ Налаштування & Управління</h3>
+                <button id="close-settings-drawer-btn" class="drawer-close-btn" title="Закрити">✕</button>
+            </div>
+            <div class="drawer-body">
+                <div class="controls-grid" style="grid-template-columns: 1fr; gap: 20px;">
+                    <div class="control-group">
+                        <div class="control-row">
+                            <span>Статус торгівлі:</span>
+                            <div class="btn-group">
+                                <button id="btn-resume" class="btn btn-sm btn-success">▶️ Запустити</button>
+                                <button id="btn-pause" class="btn btn-sm btn-danger">⏸️ Пауза</button>
+                            </div>
                         </div>
-                    </div>
-                    
-                    <div class="control-row">
-                        <span>Режим виконання:</span>
-                        <button id="toggle-execution-mode-btn" class="btn btn-sm btn-outline">🧪 Демо-Торгівля</button>
-                    </div>
+                        
+                        <div class="control-row">
+                            <span>Режим виконання:</span>
+                            <button id="toggle-execution-mode-btn" class="btn btn-sm btn-outline">🧪 Демо-Торгівля</button>
+                        </div>
 
-                    <div class="control-row">
-                        <span>Тільки моніторинг (без купівлі):</span>
-                        <label class="switch" title="Бот продовжує сканувати ринок і керувати відкритими позиціями (стоп-лос, тейк-профіт, екстрений вихід), але не відкриває нових">
-                            <input type="checkbox" id="monitor-only-toggle">
-                            <span class="switch-slider"></span>
-                        </label>
-                    </div>
-                </div>
-
-                <div class="control-group">
-                    <div class="control-row">
-                        <span>Стиль торгівлі (LLM):</span>
-                        <div class="mode-btn-group">
-                            <button id="btn-mode-chill" class="btn-mode active-chill">🦝 Chill (90%)</button>
-                            <button id="btn-mode-hunt" class="btn-mode">🔥 Hunt (60%)</button>
+                        <div class="control-row">
+                            <span>Тільки моніторинг (без купівлі):</span>
+                            <label class="switch" title="Бот продовжує сканувати ринок і керувати відкритими позиціями, але не відкриває нових">
+                                <input type="checkbox" id="monitor-only-toggle">
+                                <span class="switch-slider"></span>
+                            </label>
                         </div>
                     </div>
 
-                    <div class="control-row">
-                        <span>ШІ-Аналітик (Провайдер):</span>
-                        <select id="provider-select" class="input-field select-field" style="width: auto; margin-bottom: 0;">
-                            <option value="deepseek">🤖 DeepSeek V4 Pro / V3</option>
-                            <option value="gemini">💎 Google Gemini 1.5</option>
-                            <option value="openai">🧠 OpenAI GPT-4o-mini</option>
-                        </select>
-                    </div>
-
-                    <div class="control-row">
-                        <span>Захист від сну (24/7 Windows Keep-Alive):</span>
-                        <button id="toggle-sleep-btn" class="btn btn-sm btn-outline">💤 24/7 АКТИВНИЙ</button>
-                    </div>
-
-                    <div class="llm-key-box">
-                        <div class="llm-key-header">
-                            <span style="font-size: 0.85rem; color: #cbd5e0; font-weight: bold;">🔑 API Ключ ШІ (DeepSeek / OpenAI):</span>
-                            <span id="llm-key-status-badge" style="font-size: 0.75rem; font-weight: bold; padding: 3px 10px; border-radius: 4px; background: rgba(72, 187, 120, 0.2); color: #48bb78; border: 1px solid rgba(72, 187, 120, 0.4);">🟢 Перевірка...</span>
+                    <div class="control-group">
+                        <div class="control-row">
+                            <span>Стиль торгівлі (LLM):</span>
+                            <div class="mode-btn-group">
+                                <button id="btn-mode-chill" class="btn-mode active-chill">🦝 Chill (90%)</button>
+                                <button id="btn-mode-hunt" class="btn-mode">🔥 Hunt (60%)</button>
+                            </div>
                         </div>
-                        <div class="llm-key-row">
-                            <input type="text" id="llm-key-input" class="llm-key-input-custom" placeholder="Введіть новий ключ sk-... (якщо треба змінити)" />
-                            <button id="save-llm-key-btn" class="btn btn-primary llm-key-btn-custom">💾 Зберегти</button>
-                        </div>
-                    </div>
 
-                    <div class="control-row">
-                        <span>Вибір торгової пари:</span>
-                        <select id="symbol-select" class="input-field select-field" style="width: auto; margin-bottom: 0;">
-                            <option value="AUTO">🤖 AUTO (Авто-сканер ринку)</option>
-                            <option value="SHIB/USDT">SHIB / USDT (15m)</option>
-                            <option value="SOL/USDT">SOL / USDT (15m)</option>
-                            <option value="BTC/USDT">BTC / USDT (15m)</option>
-                            <option value="ETH/USDT">ETH / USDT (15m)</option>
-                        </select>
+                        <div class="control-row">
+                            <span>ШІ-Аналітик (Провайдер):</span>
+                            <select id="provider-select" class="input-field select-field" style="width: auto; margin-bottom: 0;">
+                                <option value="deepseek">🤖 DeepSeek V4 Pro / V3</option>
+                                <option value="gemini">💎 Google Gemini 1.5</option>
+                                <option value="openai">🧠 OpenAI GPT-4o-mini</option>
+                            </select>
+                        </div>
+
+                        <div class="control-row">
+                            <span>Захист від сну (24/7 Windows Keep-Alive):</span>
+                            <button id="toggle-sleep-btn" class="btn btn-sm btn-outline">💤 24/7 АКТИВНИЙ</button>
+                        </div>
+
+                        <div class="llm-key-box" style="margin-top: 15px;">
+                            <div class="llm-key-header">
+                                <span style="font-size: 0.85rem; color: #cbd5e0; font-weight: bold;">🔑 API Ключ ШІ (DeepSeek / OpenAI):</span>
+                                <span id="llm-key-status-badge" style="font-size: 0.75rem; font-weight: bold; padding: 3px 10px; border-radius: 4px; background: rgba(72, 187, 120, 0.2); color: #48bb78; border: 1px solid rgba(72, 187, 120, 0.4);">🟢 Перевірка...</span>
+                            </div>
+                            <div class="llm-key-row" style="margin-top: 8px;">
+                                <input type="text" id="llm-key-input" class="llm-key-input-custom" placeholder="Введіть новий ключ sk-..." />
+                                <button id="save-llm-key-btn" class="btn btn-primary llm-key-btn-custom">💾 Зберегти</button>
+                            </div>
+                        </div>
+
+                        <div class="control-row" style="margin-top: 15px;">
+                            <span>Вибір торгової пари:</span>
+                            <select id="symbol-select" class="input-field select-field" style="width: auto; margin-bottom: 0;">
+                                <option value="AUTO">🤖 AUTO (Авто-сканер ринку)</option>
+                                <option value="SHIB/USDT">SHIB / USDT (15m)</option>
+                                <option value="SOL/USDT">SOL / USDT (15m)</option>
+                                <option value="BTC/USDT">BTC / USDT (15m)</option>
+                                <option value="ETH/USDT">ETH / USDT (15m)</option>
+                            </select>
+                        </div>
                     </div>
                 </div>
             </div>
-        </section>
+        </div>
 
         <!-- Stable Exchange Chart Section (Watchlist Tabs + Stable TradingView) -->
         <section class="glass-card section-card" style="padding: 20px;">
