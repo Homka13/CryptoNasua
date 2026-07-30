@@ -165,7 +165,7 @@ Technical Indicators:
 - Market Trend: {meta.get('trend', 'UNKNOWN')}
 
 Rules:
-1. If PnL is positive (>= +0.20%, covering fees) and RSI is weakening or price is consolidating/stagnant, recommend SELL to lock in net profit.
+1. If PnL is positive (>= +0.10%) and RSI is weakening or price is consolidating/stagnant after 5 minutes, recommend SELL to lock in profit immediately.
 2. If position is stagnant in loss or flat (PnL < 0.0%) after 5 minutes and trend is failing, recommend SELL to free up capital for hot coins.
 3. If strong bullish momentum continues, recommend HOLD.
 4. Respond ONLY in valid JSON with format:
