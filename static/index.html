@@ -131,6 +131,47 @@
             <div id="convert-dust-result" class="hidden" style="margin-top:12px;"></div>
         </section>
 
+        <!-- Dedicated Trade History Card (Interactive Scrollable Table) -->
+        <section class="glass-card section-card" style="margin-bottom: 24px;">
+            <div class="chart-header" style="margin-bottom: 14px;">
+                <h3 style="margin: 0; display: flex; align-items: center; gap: 8px;">
+                    📜 Історія Закритих Угод
+                    <span id="history-total-count-badge" class="badge badge-paper" style="font-size:0.75rem;">0 угод</span>
+                </h3>
+                <div style="display: flex; gap: 12px; align-items: center;">
+                    <div style="font-size:0.85rem; color:var(--text-secondary);">
+                        Сумарний PnL: <strong id="history-total-pnl" style="color:var(--accent-green); font-family:monospace; font-size:0.95rem;">+0.00%</strong>
+                    </div>
+                    <button id="download-csv-btn-card" class="btn btn-xs btn-outline" style="font-size:0.75rem; padding:4px 10px;" title="Завантажити повну історію угод у CSV (Excel)">
+                        📥 Експорт CSV
+                    </button>
+                </div>
+            </div>
+
+            <div class="table-wrapper-scrollable" style="max-height: 380px; overflow-y: auto; border: 1px solid rgba(255,255,255,0.08); border-radius: 8px;">
+                <table style="width: 100%; border-collapse: collapse; text-align: left; font-size: 0.83rem;">
+                    <thead style="position: sticky; top: 0; background: #1a202c; z-index: 10; border-bottom: 1px solid rgba(255,255,255,0.12);">
+                        <tr style="color: var(--text-muted); font-size: 0.76rem; text-transform: uppercase;">
+                            <th style="padding: 10px 12px; min-width:70px;">Час</th>
+                            <th style="padding: 10px 12px; min-width:90px;">Монета</th>
+                            <th style="padding: 10px 12px; min-width:65px;">Тип</th>
+                            <th style="padding: 10px 12px; min-width:90px;">Обсяг</th>
+                            <th style="padding: 10px 12px; min-width:140px;">Ціна (Вхід → Вихід)</th>
+                            <th style="padding: 10px 12px; min-width:100px;">PnL (%)</th>
+                            <th style="padding: 10px 12px;">Причина Закриття</th>
+                        </tr>
+                    </thead>
+                    <tbody id="history-table-body">
+                        <tr>
+                            <td colspan="7" class="empty-positions" style="text-align:center; padding: 24px; color: var(--text-muted);">
+                                Очікування перших закритих угод...
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </section>
+
         <!-- Controls Section -->
         <section class="glass-card section-card controls-section" style="margin-bottom: 24px;">
             <h3>⚙️ Управління Ботом</h3>
@@ -228,6 +269,9 @@
                         📜 Торгові Дії (Buy / Sell)
                     </h3>
                     <div style="display:flex;gap:8px;align-items:center;">
+                        <button id="download-csv-btn" class="btn btn-xs btn-outline" style="font-size:0.75rem;padding:3px 8px;" title="Завантажити повну історію угод у CSV (Excel)">
+                            📥 CSV
+                        </button>
                         <span id="trade-actions-count" class="badge" style="font-size:0.7rem;background:rgba(16,185,129,0.15);color:#10b981;border:1px solid rgba(16,185,129,0.3);">0</span>
                         <span id="ai-verdicts-count" class="badge" style="font-size:0.7rem;background:rgba(139,92,246,0.15);color:#a78bfa;border:1px solid rgba(139,92,246,0.3);">0 🤖</span>
                     </div>

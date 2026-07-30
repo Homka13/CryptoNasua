@@ -637,18 +637,23 @@ function initApp() {
                     const badgeClass = isBuy ? 'buy' : 'sell';
                     const badgeIcon = isBuy ? '🟢' : '🔴';
                     const pnlStr = isSell && ta.pnl_pct !== null && ta.pnl_pct !== undefined
-                        ? `<span class="trade-action-pnl" style="color:${ta.pnl_pct >= 0 ? '#10b981' : '#f43f5e'};">${ta.pnl_pct >= 0 ? '+' : ''}${ta.pnl_pct.toFixed(2)}%</span>`
+                        ? `<span class="trade-action-pnl" style="color:${ta.pnl_pct >= 0 ? '#10b981' : '#f43f5e'}; font-weight:bold;">${ta.pnl_pct >= 0 ? '+' : ''}${ta.pnl_pct.toFixed(2)}%</span>`
                         : '';
 
-                    return `<div class="trade-action-row ${rowClass}">
-                        <span class="trade-action-time">${ta.time || '—'}</span>
-                        <span class="trade-action-badge ${badgeClass}">${badgeIcon} ${ta.side}</span>
-                        <span class="trade-action-symbol">${ta.symbol || '—'}</span>
-                        <span class="trade-action-details">
-                            ${ta.amount ? ta.amount.toFixed(4) : '—'} × $${fmtPrice(ta.price)}
-                            ${isSell && ta.entry_price ? ` | Entry: $${fmtPrice(ta.entry_price)}` : ''}
-                        </span>
-                        ${pnlStr}
+                    const reasonStr = ta.reason ? `<div style="font-size:0.72rem;color:#718096;margin-top:2px;grid-column:1/-1;">💡 ${ta.reason}</div>` : '';
+
+                    return `<div class="trade-action-row ${rowClass}" style="display:flex;flex-direction:column;gap:2px;">
+                        <div style="display:flex;gap:8px;align-items:center;width:100%;">
+                            <span class="trade-action-time">${ta.time || '—'}</span>
+                            <span class="trade-action-badge ${badgeClass}">${badgeIcon} ${ta.side}</span>
+                            <span class="trade-action-symbol">${ta.symbol || '—'}</span>
+                            <span class="trade-action-details" style="flex:1;">
+                                ${ta.amount ? ta.amount.toFixed(4) : '—'} × $${fmtPrice(ta.price)}
+                                ${isSell && ta.entry_price ? ` | Entry: $${fmtPrice(ta.entry_price)}` : ''}
+                            </span>
+                            ${pnlStr}
+                        </div>
+                        ${reasonStr}
                     </div>`;
                 }).join('');
             }
@@ -669,12 +674,95 @@ function initApp() {
             }
 
             listContainer.innerHTML = html;
+
+            // Render Dedicated Scrollable Trade History Table
+            renderHistoryTable(tradeActions);
         } catch (err) {
             console.error("Orders polling error:", err);
         }
     }
 
+    function renderHistoryTable(tradeActions) {
+        const tbody = document.getElementById('history-table-body');
+        const countBadge = document.getElementById('history-total-count-badge');
+        const totalPnlBadge = document.getElementById('history-total-pnl');
+        if (!tbody) return;
+
+        if (!tradeActions || tradeActions.length === 0) {
+            tbody.innerHTML = `<tr><td colspan="7" class="empty-positions" style="text-align:center; padding: 24px; color: var(--text-muted);">Очікування перших закритих угод...</td></tr>`;
+            if (countBadge) countBadge.innerText = '0 угод';
+            if (totalPnlBadge) {
+                totalPnlBadge.innerText = '+0.00%';
+                totalPnlBadge.style.color = 'var(--accent-green)';
+            }
+            return;
+        }
+
+        if (countBadge) countBadge.innerText = `${tradeActions.length} угод`;
+
+        let cumPnlPct = 0.0;
+        const rowsHtml = tradeActions.map(ta => {
+            const isBuy = ta.side === 'BUY';
+            const isSell = ta.side === 'SELL';
+            const badgeClass = isBuy ? 'buy' : 'sell';
+            const badgeIcon = isBuy ? '🟢' : '🔴';
+
+            const pnlVal = (isSell && ta.pnl_pct !== null && ta.pnl_pct !== undefined) ? ta.pnl_pct : null;
+            if (pnlVal !== null) cumPnlPct += pnlVal;
+
+            const pnlStr = pnlVal !== null
+                ? `<span style="color:${pnlVal >= 0 ? '#10b981' : '#f43f5e'}; font-weight:bold; font-family:monospace;">${pnlVal >= 0 ? '+' : ''}${pnlVal.toFixed(2)}%</span>`
+                : '<span style="color:#718096;">—</span>';
+
+            const priceStr = isSell && ta.entry_price
+                ? `$${fmtPrice(ta.entry_price)} → <strong style="color:#e2e8f0;">$${fmtPrice(ta.price)}</strong>`
+                : `$${fmtPrice(ta.price)}`;
+
+            return `<tr style="border-bottom: 1px solid rgba(255,255,255,0.05);">
+                <td style="padding: 10px 12px; color: var(--text-muted); font-family: monospace; font-size: 0.78rem;">${ta.time || '—'}</td>
+                <td style="padding: 10px 12px; font-weight: bold; color: #93bbfd;">${ta.symbol || '—'}</td>
+                <td style="padding: 10px 12px;"><span class="trade-action-badge ${badgeClass}">${badgeIcon} ${ta.side}</span></td>
+                <td style="padding: 10px 12px; font-family: monospace;">${ta.amount ? ta.amount.toFixed(4) : '—'}</td>
+                <td style="padding: 10px 12px; font-size: 0.8rem;">${priceStr}</td>
+                <td style="padding: 10px 12px;">${pnlStr}</td>
+                <td style="padding: 10px 12px; color: var(--text-secondary); font-size: 0.78rem;">${ta.reason || '—'}</td>
+            </tr>`;
+        }).join('');
+
+        tbody.innerHTML = rowsHtml;
+
+        if (totalPnlBadge) {
+            totalPnlBadge.innerText = `${cumPnlPct >= 0 ? '+' : ''}${cumPnlPct.toFixed(2)}%`;
+            totalPnlBadge.style.color = cumPnlPct >= 0 ? 'var(--accent-green)' : 'var(--accent-red)';
+        }
+    }
+
     // ===== CONTROL HANDLERS =====
+    const handleCsvDownload = async () => {
+        try {
+            const resp = await fetch('/api/export/csv', {
+                headers: { 'Authorization': `Bearer ${getAuthToken()}` }
+            });
+            if (resp.ok) {
+                const blob = await resp.blob();
+                const url = window.URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `trade_history_${Date.now()}.csv`;
+                document.body.appendChild(a);
+                a.click();
+                a.remove();
+            } else {
+                alert("Не вдалося завантажити CSV історію.");
+            }
+        } catch (err) {
+            console.error("CSV Download error:", err);
+        }
+    };
+
+    document.getElementById('download-csv-btn')?.addEventListener('click', handleCsvDownload);
+    document.getElementById('download-csv-btn-card')?.addEventListener('click', handleCsvDownload);
+
     document.getElementById('btn-resume')?.addEventListener('click', async () => {
         await fetch('/api/control', {
             method: 'POST',
