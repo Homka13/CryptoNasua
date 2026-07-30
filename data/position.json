@@ -2,5 +2,6 @@
   "symbol": "WLD/USDT",
   "entry_price": 0.3078,
   "amount": 4.5,
-  "order_id": "1001"
+  "order_id": "1001",
+  "is_paper": true
 }

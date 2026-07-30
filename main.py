@@ -38,11 +38,15 @@ from core.risk_manager import RiskManager
 from core.llm_analyst import LLMAnalyst
 from telegram_bot import TelegramInterface
 
+log_file_handler = logging.FileHandler("bot_activity.log", encoding="utf-8")
+log_file_handler.setFormatter(logging.Formatter("%(asctime)s [%(levelname)s] %(name)s: %(message)s"))
+
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
     handlers=[
-        logging.StreamHandler(sys.stdout)
+        logging.StreamHandler(sys.stdout),
+        log_file_handler
     ]
 )
 logger = logging.getLogger(__name__)
@@ -80,7 +84,11 @@ class TradingBot:
                 with open(pos_file, 'r', encoding='utf-8') as f:
                     pos = json.load(f)
                     if pos and isinstance(pos, dict) and pos.get('amount', 0) > 0:
-                        logger.info(f"📌 Loaded active open position from position.json: {pos.get('symbol')}")
+                        is_pos_paper = pos.get('is_paper', True)
+                        if is_pos_paper and not config.paper_trading:
+                            logger.warning(f"⚠️ Demo/Paper position ({pos.get('symbol')}) ignored because bot is running in LIVE mode.")
+                            return None
+                        logger.info(f"📌 Loaded active open position from position.json: {pos.get('symbol')} (Paper: {is_pos_paper})")
                         return pos
             except Exception as e:
                 logger.error(f"Error loading position.json: {e}")
@@ -91,6 +99,8 @@ class TradingBot:
         os.makedirs(pos_dir, exist_ok=True)
         pos_file = os.path.join(pos_dir, "position.json")
         try:
+            if pos:
+                pos['is_paper'] = config.paper_trading
             with open(pos_file, 'w', encoding='utf-8') as f:
                 json.dump(pos or {}, f, indent=2)
         except Exception as e:
