@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Crypto Trading Bot — Private Dashboard</title>
-    <link rel="stylesheet" href="/static/style.css?v=20260730_v2">
+    <link rel="stylesheet" href="/static/style.css?v=20260730_v3">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
@@ -112,6 +112,12 @@
             <div id="active-positions-container">
                 <div class="empty-positions">Немає відкритих угод — сканування ринку триває...</div>
             </div>
+        </section>
+
+        <!-- Full Wallet Breakdown (incl. dust below sellable minimum) -->
+        <section id="wallet-holdings-section" class="glass-card section-card hidden" style="margin-bottom: 20px;">
+            <h3>💰 Гаманець (усі монети) <span id="wallet-holdings-count-badge" class="badge badge-paper" style="font-size:0.7rem;">0</span></h3>
+            <div id="wallet-holdings-container"></div>
         </section>
 
         <!-- Controls Section -->

@@ -522,6 +522,44 @@ body.dark-theme {
     border-radius: var(--radius);
 }
 
+/* ===== WALLET HOLDINGS ===== */
+.wallet-holding-row {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    padding: 9px 12px;
+    border-radius: 10px;
+    margin-bottom: 5px;
+    font-size: 0.85rem;
+    border: 1px solid var(--border-subtle);
+    background: rgba(255, 255, 255, 0.015);
+}
+.wallet-holding-symbol {
+    font-weight: 700;
+    min-width: 110px;
+}
+.wallet-holding-amount {
+    flex: 1;
+    color: var(--text-secondary);
+    font-family: 'SF Mono', monospace;
+    font-size: 0.8rem;
+}
+.wallet-holding-value {
+    min-width: 70px;
+    text-align: right;
+    font-weight: 700;
+    font-family: 'SF Mono', monospace;
+}
+.wallet-tradable-badge, .wallet-dust-badge {
+    padding: 3px 9px;
+    border-radius: 6px;
+    font-size: 0.72rem;
+    font-weight: 700;
+    white-space: nowrap;
+}
+.wallet-tradable-badge { background: rgba(16, 185, 129, 0.15); color: var(--accent-green); border: 1px solid rgba(16, 185, 129, 0.3); }
+.wallet-dust-badge { background: rgba(136, 150, 180, 0.12); color: var(--text-muted); border: 1px solid rgba(136, 150, 180, 0.2); }
+
 /* ===== DUAL PANELS ===== */
 .dual-panel-grid {
     display: grid;

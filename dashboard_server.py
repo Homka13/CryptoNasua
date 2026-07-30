@@ -185,6 +185,34 @@ class DashboardServer:
         # Backward compat: also send the first position as active_position
         active_pos_payload = active_positions_payload[0] if active_positions_payload else None
 
+        # Full wallet breakdown (incl. dust below the exchange's sellable minimum),
+        # so the UI can show everything and flag what's actually tradable.
+        wallet_holdings = []
+        tracked_symbols = {p.get('symbol') for p in active_positions_payload}
+        try:
+            raw_list = bal.get('info', {}).get('result', {}).get('list', [])
+            raw_coins = raw_list[0].get('coin', []) if raw_list else []
+            for c in raw_coins:
+                coin = c.get('coin')
+                if not coin or coin.upper() in ('USDT', 'USDC', 'USD'):
+                    continue
+                amount = float(c.get('walletBalance', 0) or 0)
+                usd_value = float(c.get('usdValue', 0) or 0)
+                if amount <= 0:
+                    continue
+                symbol = f"{coin}/USDT"
+                wallet_holdings.append({
+                    'coin': coin,
+                    'symbol': symbol,
+                    'amount': amount,
+                    'usd_value': usd_value,
+                    'tradable': usd_value >= 5.0,
+                    'is_position': symbol in tracked_symbols
+                })
+            wallet_holdings.sort(key=lambda h: h['usd_value'], reverse=True)
+        except Exception as e:
+            logger.debug(f"Could not build wallet_holdings breakdown: {e}")
+
         active_ex = getattr(config, 'active_exchange', getattr(config, 'exchange_name', 'bybit')).upper()
         payload = {
             'symbol': meta.get('symbol', config.symbol),
@@ -213,6 +241,7 @@ class DashboardServer:
             'prevent_sleep': getattr(config, 'prevent_sleep', True),
             'active_positions': active_positions_payload,
             'active_position': active_pos_payload,
+            'wallet_holdings': wallet_holdings,
             'max_concurrent_positions': getattr(self.bot, 'max_concurrent_positions', 3),
             'scan_logs': list(getattr(self.bot, 'scan_logs', []))
         }

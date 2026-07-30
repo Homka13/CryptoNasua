@@ -367,6 +367,7 @@ function initApp() {
                 positions.push(data.active_position);
             }
             renderActivePositions(positions);
+            renderWalletHoldings(data.wallet_holdings || []);
 
             // Set default chart symbol
             if (!currentChartSymbol) {
@@ -498,6 +499,37 @@ function initApp() {
                 }
             });
         });
+    }
+
+    // ===== FULL WALLET BREAKDOWN (incl. dust below sellable minimum) =====
+    function renderWalletHoldings(holdings) {
+        const section = document.getElementById('wallet-holdings-section');
+        const container = document.getElementById('wallet-holdings-container');
+        const countBadge = document.getElementById('wallet-holdings-count-badge');
+        if (!section || !container) return;
+
+        if (!holdings || holdings.length === 0) {
+            section.classList.add('hidden');
+            return;
+        }
+        section.classList.remove('hidden');
+        if (countBadge) countBadge.innerText = holdings.length;
+
+        container.innerHTML = holdings.map(h => {
+            const priceFmt = (v) => v < 0.01 ? v.toFixed(8) : v.toFixed(4);
+            const statusHtml = h.is_position
+                ? '<span class="trade-action-badge buy">В ПОЗИЦІЇ</span>'
+                : (h.tradable
+                    ? '<span class="wallet-tradable-badge">✅ Продасться</span>'
+                    : '<span class="wallet-dust-badge">🔒 &lt; $5 — не продати</span>');
+            return `
+            <div class="wallet-holding-row">
+                <span class="wallet-holding-symbol">${h.symbol}</span>
+                <span class="wallet-holding-amount">${priceFmt(h.amount)}</span>
+                <span class="wallet-holding-value">$${h.usd_value.toFixed(2)}</span>
+                ${statusHtml}
+            </div>`;
+        }).join('');
     }
 
     // ===== TRADE ACTIONS & ORDERS HISTORY =====
