@@ -248,6 +248,10 @@ class TradingBot:
                 stagnant_info = None
 
                 if best_buy_opportunity:
+                    pos_age_min = 0.0
+                    pnl_pct = 0.0
+                    stagnant_sym = None
+
                     if self.current_position is not None:
                         pos = self.current_position
                         stagnant_sym = pos.get('symbol')
@@ -258,68 +262,68 @@ class TradingBot:
                             curr_p = self.latest_meta.get('price', entry_p) if self.latest_meta.get('symbol') == stagnant_sym else entry_p
                             pnl_pct = ((curr_p - entry_p) / entry_p)
                             
-                            # Stagnation rule: Position held > 10 min with PnL stuck in [-1.0%, +1.0%] range
-                            if pos_age_min >= 10.0 and (-0.010 <= pnl_pct <= 0.010):
+                            # Stagnation rule: Position held >= 3 min with PnL stuck in [-1.5%, +0.8%] range
+                            if pos_age_min >= 3.0 and (-0.015 <= pnl_pct <= 0.008):
                                 should_auto_swap = True
                                 stagnant_info = {'symbol': stagnant_sym, 'amount': pos['amount'], 'price': curr_p, 'age': pos_age_min, 'pnl': pnl_pct}
                                 logger.info(f"🔄 Stagnant position detected on {stagnant_sym} (Age: {pos_age_min:.1f}m, PnL: {pnl_pct*100:+.2f}%). Evaluating Auto-Swap into hot candidate {best_buy_opportunity['symbol']}...")
 
-                    if self.current_position is None or should_auto_swap:
-                        target_sym = best_buy_opportunity['symbol']
-                        target_meta = best_buy_opportunity['meta']
-                        target_reason = best_buy_opportunity['reason']
+                    target_sym = best_buy_opportunity['symbol']
+                    target_meta = best_buy_opportunity['meta']
+                    target_reason = best_buy_opportunity['reason']
 
-                        is_confirmed, llm_reason = await self.llm_analyst.evaluate_trade_signal(
-                            target_sym, config.timeframe, target_meta, target_reason
-                        )
+                    # Always evaluate AI Sentinel when a quantitative buy setup appears
+                    is_confirmed, llm_reason = await self.llm_analyst.evaluate_trade_signal(
+                        target_sym, config.timeframe, target_meta, target_reason
+                    )
 
-                        # Record AI Verdict into History Deque for Dashboard UI
-                        verdict_record = {
-                            'timestamp': int(time.time() * 1000),
-                            'time': time.strftime("%H:%M:%S"),
-                            'symbol': target_sym,
-                            'side': 'buy' if is_confirmed else 'reject',
-                            'price': target_meta.get('price', 0.0),
-                            'amount': 0.0,
-                            'status': 'CONFIRMED' if is_confirmed else 'REJECTED',
-                            'reason': llm_reason,
-                            'provider': config.llm_provider.upper()
-                        }
-                        self.ai_verdicts.appendleft(verdict_record)
+                    # Record AI Verdict into History Deque for Dashboard UI
+                    verdict_record = {
+                        'timestamp': int(time.time() * 1000),
+                        'time': time.strftime("%H:%M:%S"),
+                        'symbol': target_sym,
+                        'side': 'buy' if is_confirmed else 'reject',
+                        'price': target_meta.get('price', 0.0),
+                        'amount': 0.0,
+                        'status': 'CONFIRMED' if is_confirmed else 'REJECTED',
+                        'reason': llm_reason,
+                        'provider': config.llm_provider.upper()
+                    }
+                    self.ai_verdicts.appendleft(verdict_record)
 
-                        # Add prominent entry into live scan logs feed
-                        ai_icon = "🟢 DEEPSEEK CONFIRMED" if is_confirmed else "🛑 DEEPSEEK REJECTED"
-                        self.scan_logs.appendleft({
-                            'time': time.strftime("%H:%M:%S"),
-                            'symbol': target_sym,
-                            'price': target_meta.get('price', 0.0),
-                            'signal': 'BUY' if is_confirmed else 'REJECTED',
-                            'reason': f"🤖 {ai_icon}: {llm_reason}",
-                            'rsi': target_meta.get('rsi', 0.0),
-                            'trend': target_meta.get('trend', 'UNKNOWN')
-                        })
+                    # Add prominent entry into live scan logs feed
+                    ai_icon = "🟢 DEEPSEEK CONFIRMED" if is_confirmed else "🛑 DEEPSEEK REJECTED"
+                    self.scan_logs.appendleft({
+                        'time': time.strftime("%H:%M:%S"),
+                        'symbol': target_sym,
+                        'price': target_meta.get('price', 0.0),
+                        'signal': 'BUY' if is_confirmed else 'REJECTED',
+                        'reason': f"🤖 {ai_icon}: {llm_reason}",
+                        'rsi': target_meta.get('rsi', 0.0),
+                        'trend': target_meta.get('trend', 'UNKNOWN')
+                    })
 
-                        if not is_confirmed:
-                            # Activate 15-minute cooldown for rejected pair to prevent spam and focus on other pairs
-                            self.rejected_cooldowns[target_sym] = time.time() + (15 * 60)
-                            logger.warning(f"🛑 BUY signal for {target_sym} rejected by LLM Analyst (15m Cooldown activated): {llm_reason}")
-                            await self.telegram.send_alert(f"⚠️ *BUY Signal REJECTED by LLM ({target_sym})* [15m Cooldown Activated]: {llm_reason}")
-                        else:
-                            # Execute Auto-Swap exit of stagnant position if needed
-                            if should_auto_swap and stagnant_info:
-                                logger.info(f"🔄 Executing AUTO-SWAP exit for stagnant position {stagnant_info['symbol']}...")
-                                try:
-                                    self.exchange.execute_smart_order('sell', stagnant_info['amount'], stagnant_info['price'], symbol=stagnant_info['symbol'])
-                                    await self.telegram.send_alert(
-                                        f"🔄 *AUTO-SWAP POSITION ROTATION EXECUTED*\n"
-                                        f"• Closed Stagnant Pair: `{stagnant_info['symbol']}`\n"
-                                        f"• Stagnation Hold Time: `{stagnant_info['age']:.0f} min` (PnL: `{stagnant_info['pnl']*100:+.2f}%`)\n"
-                                        f"• Reason: Swapping capital into hot momentum coin `{target_sym}`!"
-                                    )
-                                    self.current_position = None
-                                    self._save_position(None)
-                                except Exception as swap_sell_err:
-                                    logger.error(f"Auto-Swap sell error for {stagnant_info['symbol']}: {swap_sell_err}")
+                    if not is_confirmed:
+                        # Activate 15-minute cooldown for rejected pair to prevent spam and focus on other pairs
+                        self.rejected_cooldowns[target_sym] = time.time() + (15 * 60)
+                        logger.warning(f"🛑 BUY signal for {target_sym} rejected by LLM Analyst (15m Cooldown activated): {llm_reason}")
+                        await self.telegram.send_alert(f"⚠️ *BUY Signal REJECTED by LLM ({target_sym})* [15m Cooldown Activated]: {llm_reason}")
+                    elif self.current_position is None or should_auto_swap:
+                        # Execute Auto-Swap exit of stagnant position if needed
+                        if should_auto_swap and stagnant_info:
+                            logger.info(f"🔄 Executing AUTO-SWAP exit for stagnant position {stagnant_info['symbol']}...")
+                            try:
+                                self.exchange.execute_smart_order('sell', stagnant_info['amount'], stagnant_info['price'], symbol=stagnant_info['symbol'])
+                                await self.telegram.send_alert(
+                                    f"🔄 *AUTO-SWAP POSITION ROTATION EXECUTED*\n"
+                                    f"• Closed Stagnant Pair: `{stagnant_info['symbol']}`\n"
+                                    f"• Stagnation Hold Time: `{stagnant_info['age']:.0f} min` (PnL: `{stagnant_info['pnl']*100:+.2f}%`)\n"
+                                    f"• Reason: Swapping capital into hot momentum coin `{target_sym}`!"
+                                )
+                                self.current_position = None
+                                self._save_position(None)
+                            except Exception as swap_sell_err:
+                                logger.error(f"Auto-Swap sell error for {stagnant_info['symbol']}: {swap_sell_err}")
 
                             bal = self.exchange.fetch_balance()
                             usdt_free = bal.get('USDT', {}).get('free', 0.0)
