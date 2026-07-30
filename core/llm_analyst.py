@@ -130,3 +130,88 @@ Rules:
 
         logger.error(f"Error evaluating trade signal via LLM Analyst: {last_error}")
         return True, f"LLM Analyst API Key Invalid ({last_error}). Please check your API key in Web Dashboard."
+
+    async def evaluate_active_position_health(self, symbol: str, timeframe: str, meta: Dict[str, Any], age_minutes: float, pnl_pct: float) -> Tuple[bool, str]:
+        """
+        Active Position Guardian: Called when position age >= 5.0 minutes.
+        Asks DeepSeek LLM whether to SELL to bank micro-profit/exit stagnation or KEEP HOLDING.
+        Returns (should_close: bool, reason: str)
+        """
+        if not config.use_llm_confirmation:
+            return False, "LLM active monitoring disabled"
+
+        key = (config.deepseek_api_key or config.llm_api_key or os.getenv("DEEPSEEK_API_KEY", "") or os.getenv("LLM_API_KEY", "")).strip()
+        if not key or key == "your_deepseek_api_key_here":
+            return False, "No LLM API key"
+
+        provider = getattr(config, 'llm_provider', 'deepseek').lower()
+        if key.startswith("sk-or-v1-"):
+            api_url = "https://openrouter.ai/api/v1/chat/completions"
+            model = "deepseek/deepseek-chat"
+        elif provider == "openai" or (key.startswith("sk-proj-") or key.startswith("sk-admin-")):
+            api_url = "https://api.openai.com/v1/chat/completions"
+            model = "gpt-4o-mini"
+        else:
+            api_url = "https://api.deepseek.com/chat/completions"
+            model = getattr(config, 'deepseek_model', 'deepseek-chat')
+
+        prompt = f"""You are an active crypto position guardian.
+The position for {symbol} has been open for {age_minutes:.1f} minutes with current PnL: {pnl_pct:+.2f}%.
+Technical Indicators:
+- Current Price: ${meta.get('price', 0):.4f}
+- RSI (14): {meta.get('rsi', 0):.1f}
+- EMA 20: ${meta.get('ema_fast', 0):.4f}
+- EMA 50: ${meta.get('ema_slow', 0):.4f}
+- Market Trend: {meta.get('trend', 'UNKNOWN')}
+
+Rules:
+1. If PnL is positive (>= +0.20%, covering fees) and RSI is weakening or price is consolidating/stagnant, recommend SELL to lock in net profit.
+2. If position is stagnant in loss or flat (PnL < 0.0%) after 5 minutes and trend is failing, recommend SELL to free up capital for hot coins.
+3. If strong bullish momentum continues, recommend HOLD.
+4. Respond ONLY in valid JSON with format:
+{{"action": "SELL" or "HOLD", "reason": "Short 1-sentence Ukrainian explanation"}}"""
+
+        try:
+            headers = {
+                "Authorization": f"Bearer {key}",
+                "Content-Type": "application/json"
+            }
+            if "openrouter.ai" in api_url:
+                headers["HTTP-Referer"] = "https://crypto-trading-bot.local"
+                headers["X-Title"] = "Crypto Trading Bot"
+
+            body = {
+                "model": model,
+                "messages": [
+                    {"role": "system", "content": "You are an active crypto risk sentinel. Respond strictly in valid JSON."},
+                    {"role": "user", "content": prompt}
+                ],
+                "temperature": 0.2
+            }
+
+            loop = asyncio.get_event_loop()
+            req = urllib.request.Request(api_url, data=json.dumps(body).encode('utf-8'), headers=headers)
+            
+            def _fetch():
+                with urllib.request.urlopen(req, timeout=10) as response:
+                    return json.loads(response.read().decode('utf-8'))
+
+            res = await loop.run_in_executor(None, _fetch)
+            content = res['choices'][0]['message']['content'].strip()
+            if content.startswith("```json"):
+                content = content[7:]
+            if content.endswith("```"):
+                content = content[:-3]
+            content = content.strip()
+
+            data = json.loads(content)
+            action = data.get("action", "HOLD").upper()
+            reason = data.get("reason", "DeepSeek active position monitoring")
+
+            if action == "SELL":
+                logger.info(f"🤖 DeepSeek Active Sentinel recommended SELL for {symbol}: {reason}")
+                return True, f"🤖 DeepSeek Sentinel (5m Health Check): {reason}"
+            return False, reason
+        except Exception as e:
+            logger.debug(f"DeepSeek Active Position Sentinel check error: {e}")
+            return False, str(e)

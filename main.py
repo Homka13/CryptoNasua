@@ -323,15 +323,14 @@ class TradingBot:
             return (f"🚨 EMERGENCY EXIT: Тренд перевернувся на BEARISH "
                     f"(EMA{config.ema_fast}={ema_fast:.6f} < EMA{config.ema_slow}={ema_slow:.6f}), PnL: {pnl_pct:+.2f}%")
 
-        # 2. Scalping Stagnation Exit: Position went nowhere for 12+ minutes with PnL < +0.15% — free up capital.
-        if age_minutes >= 12.0 and pnl_pct < 0.15:
-            return (f"⏰ STAGNATION EXIT: Позиція зависла у боковику {age_minutes:.1f} хв "
-                    f"без руху (PnL: {pnl_pct:+.2f}% < +0.15%), вивільняємо депозит для нових угод.")
+        # 2. 5-Minute Micro-Profit Bank: If after 5 min PnL >= +0.22% (covers fees + net profit), exit immediately to bank it!
+        if age_minutes >= 5.0 and pnl_pct >= 0.22:
+            return f"💰 5-MIN MICRO-PROFIT EXIT: Зафіксовано чистий прибуток {pnl_pct:+.2f}% за {age_minutes:.1f} хв (покриває комісію + чистий плюс)!"
 
-        # 3. Position went nowhere for hours — free up the capital.
-        if age_minutes / 60.0 > config.health_stale_hours and abs(pnl_pct) < config.health_stale_pnl_pct:
-            return (f"⏰ TIMEOUT EXIT: Позиція зависла {age_minutes / 60.0:.1f} год "
-                    f"без руху (PnL: {pnl_pct:+.2f}%)")
+        # 3. 5-Minute Fast Scalping Stagnation Exit: If position went nowhere for 5.0+ minutes with PnL < +0.15% — free up capital.
+        if age_minutes >= 5.0 and pnl_pct < 0.15:
+            return (f"⏰ 5-MIN STAGNATION EXIT: Позиція зависла у боковику {age_minutes:.1f} хв "
+                    f"без руху (PnL: {pnl_pct:+.2f}% < +0.15%), вивільняємо депозит для нових угод.")
 
         # 4. RSI overheated while in profit — bank it before the pullback.
         if rsi > config.health_rsi_overheat and pnl_pct > 0:
@@ -642,6 +641,19 @@ class TradingBot:
                         # entered on no longer hold, before TP/SL has a chance to trigger.
                         if pos_for_sym and signal != 'SELL':
                             health_reason = self.check_position_health(sym, pos_for_sym, meta)
+                            if not health_reason:
+                                entry_t = float(pos_for_sym.get('entry_time', time.time()))
+                                age_m = (time.time() - entry_t) / 60.0
+                                entry_p = float(pos_for_sym.get('entry_price', 0) or meta.get('price', 0))
+                                curr_p = float(meta.get('price', 0) or entry_p)
+                                pnl = ((curr_p - entry_p) / entry_p * 100.0) if entry_p > 0 else 0.0
+                                if age_m >= 5.0:
+                                    should_llm_exit, llm_health_msg = await self.llm_analyst.evaluate_active_position_health(
+                                        sym, config.timeframe, meta, age_m, pnl
+                                    )
+                                    if should_llm_exit:
+                                        health_reason = llm_health_msg
+
                             if health_reason:
                                 logger.warning(f"[{sym}] {health_reason}")
                                 await self.close_position_market(
