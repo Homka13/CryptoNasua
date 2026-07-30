@@ -359,6 +359,16 @@ class DashboardServer:
                             msg += f'; {len(failed)} failed: ' + '; '.join(failed)
                         return web.json_response({'success': True, 'message': msg})
                     return web.json_response({'success': False, 'error': 'No active positions to close'}, status=400)
+            elif action == 'convert_dust':
+                logger.info("♻️ Dust conversion requested via Web Dashboard")
+                result = await asyncio.get_event_loop().run_in_executor(None, self.bot.convert_dust_to_usdt)
+                if result.get('error'):
+                    return web.json_response({'success': False, 'error': result['error']}, status=400)
+                return web.json_response({
+                    'success': True,
+                    'converted': result['converted'],
+                    'skipped': result['skipped'],
+                })
             elif action == 'set_exchange':
                 ex_name = body.get('exchange', 'bybit').lower()
                 if ex_name in ('bybit', 'binance'):

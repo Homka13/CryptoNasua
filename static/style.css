@@ -200,14 +200,34 @@ body.dark-theme {
     align-items: center;
     gap: 12px;
 }
-.brand h1 {
-    font-size: 1.15rem;
-    font-weight: 700;
-    letter-spacing: -0.01em;
-    background: linear-gradient(135deg, #f0f4fc 0%, #a5b4fc 100%);
+/* ===== CRYPTONASUA BRAND ===== */
+.brand-name {
+    font-size: 1.22rem;
+    font-weight: 800;
+    letter-spacing: -0.02em;
+    color: var(--text-primary);
+    white-space: nowrap;
+}
+.brand-accent {
+    background: linear-gradient(135deg, var(--accent-green) 0%, #5eead4 100%);
     -webkit-background-clip: text;
+    background-clip: text;
     -webkit-text-fill-color: transparent;
 }
+.brand-mark {
+    font-size: 1.4rem;
+    line-height: 1;
+    filter: drop-shadow(0 0 10px var(--accent-green-glow));
+}
+.brand-lockup {
+    display: inline-flex;
+    align-items: center;
+    gap: 9px;
+    justify-content: center;
+}
+.login-brand { margin-bottom: 12px; }
+.login-brand .brand-name { font-size: 1.9rem; }
+.login-brand .brand-mark { font-size: 2rem; }
 .pulse-dot {
     width: 10px;
     height: 10px;
@@ -641,6 +661,8 @@ body.dark-theme {
     margin-bottom: 14px;
 }
 .alert-danger { background: rgba(244, 63, 94, 0.12); color: #fda4af; border: 1px solid rgba(244, 63, 94, 0.3); }
+.alert-success { background: rgba(16, 185, 129, 0.12); color: #6ee7b7; border: 1px solid rgba(16, 185, 129, 0.3); line-height: 1.7; }
+.alert-info { background: rgba(59, 130, 246, 0.10); color: #93bbfd; border: 1px solid rgba(59, 130, 246, 0.25); line-height: 1.7; }
 
 /* ===== WATCHLIST BAR ===== */
 .watchlist-bar-tabs {

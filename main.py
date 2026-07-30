@@ -278,6 +278,57 @@ class TradingBot:
 
         return None
 
+    def convert_dust_to_usdt(self) -> Dict[str, Any]:
+        """Converts unsellable leftover balances to USDT.
+
+        Partial fills and lot-size rounding leave amounts too small to ever clear the
+        exchange's minimum order value, so they accumulate as untradeable dust. Coins
+        that are large enough to sell as a normal order are left alone — the strategy
+        should decide those, not a cleanup routine.
+        """
+        if config.paper_trading:
+            return {'converted': [], 'skipped': [], 'error': 'Not available in paper trading mode'}
+        if not hasattr(self.exchange, 'fetch_convert_candidates'):
+            return {'converted': [], 'skipped': [], 'error': 'Convert not supported on this exchange'}
+
+        min_sellable = getattr(config, 'min_order_usdt', 5.5)
+        converted, skipped = [], []
+
+        for cand in self.exchange.fetch_convert_candidates():
+            coin = cand['coin']
+            symbol = f"{coin}/USDT"
+            held_symbols = {p.get('symbol') for p in self.active_positions}
+            if symbol in held_symbols:
+                skipped.append({'coin': coin, 'why': 'open position'})
+                continue
+
+            try:
+                ticker = self.exchange.fetch_ticker(symbol)
+                price = float(ticker.get('last') or ticker.get('close') or 0)
+            except Exception:
+                price = 0.0
+
+            value = cand['balance'] * price
+            if price > 0 and value >= min_sellable:
+                skipped.append({'coin': coin, 'why': f'sellable as order (${value:.2f})'})
+                continue
+
+            amount = min(cand['balance'], cand['max_amount']) if cand['max_amount'] > 0 else cand['balance']
+            try:
+                res = self.exchange.convert_to_usdt(coin, amount)
+                logger.info(f"♻️ Converted dust: {amount} {coin} → {res.get('to_amount')} USDT")
+                converted.append({
+                    'coin': coin,
+                    'amount': amount,
+                    'usdt_received': res.get('to_amount'),
+                    'usd_value': round(value, 4),
+                })
+            except Exception as e:
+                logger.error(f"Dust conversion failed for {coin}: {e}")
+                skipped.append({'coin': coin, 'why': f'convert failed: {e}'})
+
+        return {'converted': converted, 'skipped': skipped, 'error': None}
+
     async def close_position_market(self, symbol: str, reason: str, cooldown_minutes: int = 0) -> tuple:
         """Sells an open position on the exchange and drops it from tracking.
 
@@ -550,140 +601,142 @@ class TradingBot:
                         self.rejected_cooldowns[target_sym] = time.time() + (15 * 60)
                         logger.warning(f"🛑 BUY signal for {target_sym} rejected by LLM Analyst (15m Cooldown activated): {llm_reason}")
                         await self.telegram.send_alert(f"⚠️ *BUY Signal REJECTED by LLM ({target_sym})* [15m Cooldown Activated]: {llm_reason}")
-                        # Execute Auto-Swap exit of stagnant position if needed (only when at max capacity)
-                        if should_auto_swap and stagnant_info and len(self.active_positions) >= self.max_concurrent_positions:
-                            logger.info(f"🔄 Executing AUTO-SWAP exit for stagnant position {stagnant_info['symbol']}...")
-                            swap_successful = False
-                            try:
-                                self.exchange.execute_smart_order('sell', stagnant_info['amount'], stagnant_info['price'], symbol=stagnant_info['symbol'])
+                        continue
 
-                                self.trade_actions.appendleft({
-                                    'timestamp': int(time.time() * 1000),
-                                    'time': time.strftime("%H:%M:%S"),
-                                    'symbol': stagnant_info['symbol'],
-                                    'side': 'SELL',
-                                    'amount': stagnant_info['amount'],
-                                    'price': stagnant_info['price'],
-                                    'pnl_pct': round(stagnant_info['pnl'] * 100, 2),
-                                    'pnl_usdt': round(stagnant_info['pnl'] * stagnant_info['amount'] * stagnant_info['price'], 4),
-                                    'reason': f"🔄 AUTO-SWAP → {target_sym}",
-                                    'status': 'FILLED'
-                                })
-
-                                self.scan_logs.appendleft({
-                                    'time': time.strftime("%H:%M:%S"),
-                                    'symbol': stagnant_info['symbol'],
-                                    'price': stagnant_info['price'],
-                                    'signal': 'SELL',
-                                    'reason': f"🔄 AUTO-SWAP SOLD {stagnant_info['amount']:.4f} @ ${stagnant_info['price']:.4f} → {target_sym}",
-                                    'rsi': 0.0,
-                                    'trend': 'UNKNOWN'
-                                })
-
-                                await self.telegram.send_alert(
-                                    f"🔄 *AUTO-SWAP POSITION ROTATION EXECUTED*\n"
-                                    f"• Closed Stagnant Pair: `{stagnant_info['symbol']}`\n"
-                                    f"• Stagnation Hold Time: `{stagnant_info['age']:.0f} min` (PnL: `{stagnant_info['pnl']*100:+.2f}%`)\n"
-                                    f"• Reason: Swapping capital into hot momentum coin `{target_sym}`!"
-                                )
-                                self.active_positions = [p for p in self.active_positions if p.get('symbol') != stagnant_info['symbol']]
-                                self.active_position_metas.pop(stagnant_info['symbol'], None)
-                                self._save_positions()
-                                swap_successful = True
-                            except Exception as swap_sell_err:
-                                logger.error(f"Auto-Swap sell error for {stagnant_info['symbol']}: {swap_sell_err}")
-                                self.scan_logs.appendleft({
-                                    'time': time.strftime("%H:%M:%S"),
-                                    'symbol': stagnant_info['symbol'],
-                                    'price': stagnant_info['price'],
-                                    'signal': 'ERROR',
-                                    'reason': f"⚠️ Помилка Auto-Swap на {config.active_exchange.upper()}: {swap_sell_err}"
-                                })
-                                if "apiKey" in str(swap_sell_err):
-                                    await self.telegram.send_alert(
-                                        f"⚠️ *Помилка авторизації {config.active_exchange.upper()}*:\n"
-                                        f"Для виконання торгівлі у LIVE режимі перевірте API-ключі у файлі `.env`!"
-                                    )
-
-                        # Only proceed to buy if we have room (either from swap or under max)
-                        if len(self.active_positions) >= self.max_concurrent_positions:
-                            continue
-
+                    # Execute Auto-Swap exit of stagnant position if needed (only when at max capacity)
+                    if should_auto_swap and stagnant_info and len(self.active_positions) >= self.max_concurrent_positions:
+                        logger.info(f"🔄 Executing AUTO-SWAP exit for stagnant position {stagnant_info['symbol']}...")
+                        swap_successful = False
                         try:
-                            bal = self.exchange.fetch_balance()
-                            usdt_free = bal.get('USDT', {}).get('free', 0.0)
-                        except Exception as bal_err:
-                            logger.error(f"Error fetching balance for trade execution: {bal_err}")
-                            if "apiKey" in str(bal_err):
-                                await self.telegram.send_alert(f"⚠️ *LIVE Mode Error*: Потрібно вказати API ключі у файлі `.env`!")
-                            continue
+                            self.exchange.execute_smart_order('sell', stagnant_info['amount'], stagnant_info['price'], symbol=stagnant_info['symbol'])
 
-                        # Split available capital across remaining position slots
-                        slots_remaining = self.max_concurrent_positions - len(self.active_positions)
-                        alloc_usdt = usdt_free / max(slots_remaining, 1)
+                            self.trade_actions.appendleft({
+                                'timestamp': int(time.time() * 1000),
+                                'time': time.strftime("%H:%M:%S"),
+                                'symbol': stagnant_info['symbol'],
+                                'side': 'SELL',
+                                'amount': stagnant_info['amount'],
+                                'price': stagnant_info['price'],
+                                'pnl_pct': round(stagnant_info['pnl'] * 100, 2),
+                                'pnl_usdt': round(stagnant_info['pnl'] * stagnant_info['amount'] * stagnant_info['price'], 4),
+                                'reason': f"🔄 AUTO-SWAP → {target_sym}",
+                                'status': 'FILLED'
+                            })
 
-                        is_allowed, amount, risk_reason = self.risk_manager.calculate_position_size(
-                            alloc_usdt, target_meta['price']
-                        )
+                            self.scan_logs.appendleft({
+                                'time': time.strftime("%H:%M:%S"),
+                                'symbol': stagnant_info['symbol'],
+                                'price': stagnant_info['price'],
+                                'signal': 'SELL',
+                                'reason': f"🔄 AUTO-SWAP SOLD {stagnant_info['amount']:.4f} @ ${stagnant_info['price']:.4f} → {target_sym}",
+                                'rsi': 0.0,
+                                'trend': 'UNKNOWN'
+                            })
 
-                        if is_allowed:
-                            try:
-                                logger.info(f"Executing BUY for {target_sym} via Quant Engine: {risk_reason}")
-                                orders = self.exchange.execute_smart_order('buy', amount, target_meta['price'], symbol=target_sym)
-
-                                verdict_record['amount'] = amount
-                                new_pos = {
-                                    'symbol': target_sym,
-                                    'entry_price': target_meta['price'],
-                                    'amount': amount,
-                                    'entry_time': time.time(),
-                                    'order_id': orders[0].get('id') if orders else 'N/A'
-                                }
-                                self.active_positions.append(new_pos)
-                                self._save_positions()
-
-                                self.trade_actions.appendleft({
-                                    'timestamp': int(time.time() * 1000),
-                                    'time': time.strftime("%H:%M:%S"),
-                                    'symbol': target_sym,
-                                    'side': 'BUY',
-                                    'amount': amount,
-                                    'price': target_meta['price'],
-                                    'pnl_pct': None,
-                                    'pnl_usdt': None,
-                                    'reason': target_reason,
-                                    'status': 'FILLED'
-                                })
-
-                                self.scan_logs.appendleft({
-                                    'time': time.strftime("%H:%M:%S"),
-                                    'symbol': target_sym,
-                                    'price': target_meta['price'],
-                                    'signal': 'BUY',
-                                    'reason': f"🟢 BOUGHT {amount:.4f} @ ${target_meta['price']:.4f} | {target_reason}",
-                                    'rsi': target_meta.get('rsi', 0.0),
-                                    'trend': target_meta.get('trend', 'UNKNOWN')
-                                })
-
+                            await self.telegram.send_alert(
+                                f"🔄 *AUTO-SWAP POSITION ROTATION EXECUTED*\n"
+                                f"• Closed Stagnant Pair: `{stagnant_info['symbol']}`\n"
+                                f"• Stagnation Hold Time: `{stagnant_info['age']:.0f} min` (PnL: `{stagnant_info['pnl']*100:+.2f}%`)\n"
+                                f"• Reason: Swapping capital into hot momentum coin `{target_sym}`!"
+                            )
+                            self.active_positions = [p for p in self.active_positions if p.get('symbol') != stagnant_info['symbol']]
+                            self.active_position_metas.pop(stagnant_info['symbol'], None)
+                            self._save_positions()
+                            swap_successful = True
+                        except Exception as swap_sell_err:
+                            logger.error(f"Auto-Swap sell error for {stagnant_info['symbol']}: {swap_sell_err}")
+                            self.scan_logs.appendleft({
+                                'time': time.strftime("%H:%M:%S"),
+                                'symbol': stagnant_info['symbol'],
+                                'price': stagnant_info['price'],
+                                'signal': 'ERROR',
+                                'reason': f"⚠️ Помилка Auto-Swap на {config.active_exchange.upper()}: {swap_sell_err}"
+                            })
+                            if "apiKey" in str(swap_sell_err):
                                 await self.telegram.send_alert(
-                                    f"🟢 *BUY ORDER EXECUTED (Quant Engine)*\n"
-                                    f"• Pair: `{target_sym}`\n"
-                                    f"• Price: `${target_meta['price']:.2f}`\n"
-                                    f"• Amount: `{amount:.4f}`\n"
-                                    f"• Active Positions: `{len(self.active_positions)}/{self.max_concurrent_positions}`\n"
-                                    f"• Execution: `Limit Offset + Iceberg ({config.iceberg_slices} slices)`\n"
-                                    f"• Strategy Reason: {target_reason}\n"
-                                    f"• {llm_reason}"
+                                    f"⚠️ *Помилка авторизації {config.active_exchange.upper()}*:\n"
+                                    f"Для виконання торгівлі у LIVE режимі перевірте API-ключі у файлі `.env`!"
                                 )
-                            except Exception as order_err:
-                                verdict_record['status'] = 'EXCHANGE_REJECTED'
-                                verdict_record['reason'] += f" | ⚠️ Exchange Error: {order_err}"
-                                logger.error(f"Exchange Order Execution Error for {target_sym}: {order_err}")
-                                await self.telegram.send_alert(f"⚠️ *Exchange Order Rejected*: {order_err}")
-                        else:
-                            verdict_record['status'] = 'RISK_REJECTED'
-                            verdict_record['reason'] += f" | ⚠️ RiskManager: {risk_reason}"
-                            logger.warning(f"BUY rejected by RiskManager for {target_sym}: {risk_reason}")
+
+                    # Only proceed to buy if we have room (either from swap or under max)
+                    if len(self.active_positions) >= self.max_concurrent_positions:
+                        continue
+
+                    try:
+                        bal = self.exchange.fetch_balance()
+                        usdt_free = bal.get('USDT', {}).get('free', 0.0)
+                    except Exception as bal_err:
+                        logger.error(f"Error fetching balance for trade execution: {bal_err}")
+                        if "apiKey" in str(bal_err):
+                            await self.telegram.send_alert(f"⚠️ *LIVE Mode Error*: Потрібно вказати API ключі у файлі `.env`!")
+                        continue
+
+                    # Size against the whole free balance. The RiskManager's 45% rule already
+                    # leaves room for further entries, and it shrinks naturally as the balance
+                    # drops with each fill — pre-dividing by the free slot count starved orders
+                    # below the exchange minimum on a small account.
+                    is_allowed, amount, risk_reason = self.risk_manager.calculate_position_size(
+                        usdt_free, target_meta['price']
+                    )
+
+                    if is_allowed:
+                        try:
+                            logger.info(f"Executing BUY for {target_sym} via Quant Engine: {risk_reason}")
+                            orders = self.exchange.execute_smart_order('buy', amount, target_meta['price'], symbol=target_sym)
+
+                            verdict_record['amount'] = amount
+                            new_pos = {
+                                'symbol': target_sym,
+                                'entry_price': target_meta['price'],
+                                'amount': amount,
+                                'entry_time': time.time(),
+                                'order_id': orders[0].get('id') if orders else 'N/A'
+                            }
+                            self.active_positions.append(new_pos)
+                            self._save_positions()
+
+                            self.trade_actions.appendleft({
+                                'timestamp': int(time.time() * 1000),
+                                'time': time.strftime("%H:%M:%S"),
+                                'symbol': target_sym,
+                                'side': 'BUY',
+                                'amount': amount,
+                                'price': target_meta['price'],
+                                'pnl_pct': None,
+                                'pnl_usdt': None,
+                                'reason': target_reason,
+                                'status': 'FILLED'
+                            })
+
+                            self.scan_logs.appendleft({
+                                'time': time.strftime("%H:%M:%S"),
+                                'symbol': target_sym,
+                                'price': target_meta['price'],
+                                'signal': 'BUY',
+                                'reason': f"🟢 BOUGHT {amount:.4f} @ ${target_meta['price']:.4f} | {target_reason}",
+                                'rsi': target_meta.get('rsi', 0.0),
+                                'trend': target_meta.get('trend', 'UNKNOWN')
+                            })
+
+                            await self.telegram.send_alert(
+                                f"🟢 *BUY ORDER EXECUTED (Quant Engine)*\n"
+                                f"• Pair: `{target_sym}`\n"
+                                f"• Price: `${target_meta['price']:.2f}`\n"
+                                f"• Amount: `{amount:.4f}`\n"
+                                f"• Active Positions: `{len(self.active_positions)}/{self.max_concurrent_positions}`\n"
+                                f"• Execution: `Limit Offset + Iceberg ({config.iceberg_slices} slices)`\n"
+                                f"• Strategy Reason: {target_reason}\n"
+                                f"• {llm_reason}"
+                            )
+                        except Exception as order_err:
+                            verdict_record['status'] = 'EXCHANGE_REJECTED'
+                            verdict_record['reason'] += f" | ⚠️ Exchange Error: {order_err}"
+                            logger.error(f"Exchange Order Execution Error for {target_sym}: {order_err}")
+                            await self.telegram.send_alert(f"⚠️ *Exchange Order Rejected*: {order_err}")
+                    else:
+                        verdict_record['status'] = 'RISK_REJECTED'
+                        verdict_record['reason'] += f" | ⚠️ RiskManager: {risk_reason}"
+                        logger.warning(f"BUY rejected by RiskManager for {target_sym}: {risk_reason}")
 
             except Exception as e:
                 logger.error(f"Error in bot loop: {e}")
@@ -694,7 +747,7 @@ class TradingBot:
 
 async def main():
     print("=" * 65, flush=True)
-    print("🚀 CRYPTO TRADING BOT SERVER INITIALIZING...", flush=True)
+    print("🦝 CRYPTONASUA TRADING TERMINAL INITIALIZING...", flush=True)
     print("🌐 WEB DASHBOARD: http://127.0.0.1:5001", flush=True)
     print("🔑 LOGIN: yuhim1308@gmail.com | PASSWORD: admin", flush=True)
     print("=" * 65, flush=True)

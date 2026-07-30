@@ -525,6 +525,47 @@ function initApp() {
         }).join('');
     }
 
+    // ===== DUST CONVERSION =====
+    const convertDustBtn = document.getElementById('convert-dust-btn');
+    if (convertDustBtn) {
+        convertDustBtn.addEventListener('click', async () => {
+            const resultBox = document.getElementById('convert-dust-result');
+            if (!confirm('Конвертувати залишки, які неможливо продати ордером, у USDT?')) return;
+
+            const originalLabel = convertDustBtn.innerHTML;
+            convertDustBtn.disabled = true;
+            convertDustBtn.innerHTML = '♻️ Конвертую...';
+            try {
+                const resp = await fetch('/api/control', {
+                    method: 'POST',
+                    headers: { 'Authorization': `Bearer ${getAuthToken()}`, 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ action: 'convert_dust' })
+                });
+                const data = await resp.json();
+                resultBox.classList.remove('hidden');
+
+                if (!data.success) {
+                    resultBox.innerHTML = `<div class="alert-box alert-danger">⚠️ ${data.error || 'Помилка конвертації'}</div>`;
+                } else if ((data.converted || []).length === 0) {
+                    const skipped = (data.skipped || []).map(s => `${s.coin} — ${s.why}`).join('<br>');
+                    resultBox.innerHTML = `<div class="alert-box alert-info">Немає що конвертувати.${skipped ? '<br>' + skipped : ''}</div>`;
+                } else {
+                    const rows = data.converted
+                        .map(c => `✅ ${c.amount} ${c.coin} → ${c.usdt_received} USDT`)
+                        .join('<br>');
+                    resultBox.innerHTML = `<div class="alert-box alert-success">${rows}</div>`;
+                }
+                fetchStatus();
+            } catch (err) {
+                resultBox.classList.remove('hidden');
+                resultBox.innerHTML = `<div class="alert-box alert-danger">⚠️ ${err.message}</div>`;
+            } finally {
+                convertDustBtn.disabled = false;
+                convertDustBtn.innerHTML = originalLabel;
+            }
+        });
+    }
+
     // ===== TRADE ACTIONS & ORDERS HISTORY =====
     async function fetchOrders() {
         try {

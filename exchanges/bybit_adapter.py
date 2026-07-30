@@ -195,6 +195,61 @@ class BybitExchangeAdapter(BaseExchangeAdapter):
 
         return executed_orders
 
+    def fetch_convert_candidates(self) -> List[Dict[str, Any]]:
+        """Lists wallet coins eligible for Bybit's Convert flow.
+
+        Convert has far lower minimums than the spot order book (e.g. 841 SHIB vs the
+        ~1.08M SHIB needed to clear a $5 spot order), so leftovers that can never be
+        sold as an order can still be recovered here.
+        """
+        try:
+            res = self.exchange.privateGetV5AssetExchangeQueryCoinList({'accountType': 'eb_convert_uta'})
+        except Exception as e:
+            logger.error(f"Could not fetch Bybit convert coin list: {e}")
+            return []
+
+        candidates = []
+        for c in res.get('result', {}).get('coins', []) or []:
+            coin = c.get('coin')
+            if not coin or coin.upper() in ('USDT', 'USDC', 'USD'):
+                continue
+            balance = float(c.get('balance') or 0)
+            min_amount = float(c.get('singleFromMinLimit') or 0)
+            max_amount = float(c.get('singleFromMaxLimit') or 0)
+            if balance <= 0 or min_amount <= 0 or balance < min_amount:
+                continue
+            candidates.append({
+                'coin': coin,
+                'balance': balance,
+                'min_amount': min_amount,
+                'max_amount': max_amount,
+            })
+        return candidates
+
+    def convert_to_usdt(self, coin: str, amount: float) -> Dict[str, Any]:
+        """Converts a coin balance to USDT via Bybit Convert (quote -> confirm)."""
+        quote = self.exchange.privatePostV5AssetExchangeQuoteApply({
+            'fromCoin': coin,
+            'toCoin': 'USDT',
+            'requestCoin': coin,
+            'requestAmount': str(amount),
+            'accountType': 'eb_convert_uta',
+        })
+        result = quote.get('result', {}) or {}
+        quote_tx_id = result.get('quoteTxId')
+        if not quote_tx_id:
+            raise Exception(f"No quote returned for {coin}: {quote}")
+
+        to_amount = result.get('toAmount')
+        confirm = self.exchange.privatePostV5AssetExchangeConvertExecute({'quoteTxId': quote_tx_id})
+        return {
+            'coin': coin,
+            'from_amount': amount,
+            'to_amount': to_amount,
+            'quote_tx_id': quote_tx_id,
+            'info': confirm,
+        }
+
     def fetch_dynamic_hot_pairs(self, min_volume: float = 1000000.0, limit: int = 25) -> List[str]:
         try:
             tickers = self.exchange.fetch_tickers()

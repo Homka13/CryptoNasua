@@ -1,1 +1,10 @@
-[]
+[
+  {
+    "symbol": "GAIB/USDT",
+    "entry_price": 0.015896,
+    "amount": 345.99899345747355,
+    "entry_time": 1785408822.919161,
+    "order_id": "2270568203183026688",
+    "is_paper": false
+  }
+]

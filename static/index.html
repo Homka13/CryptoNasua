@@ -3,8 +3,8 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Crypto Trading Bot — Private Dashboard</title>
-    <link rel="stylesheet" href="/static/style.css?v=20260730_v4">
+    <title>CryptoNasua — Private Trading Dashboard</title>
+    <link rel="stylesheet" href="/static/style.css?v=20260730_v5">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
@@ -17,7 +17,11 @@
     <!-- Authentication Screen Modal -->
     <div id="login-modal" class="modal-overlay">
         <div class="glass-card login-card">
-            <div class="logo-badge">🤖 Bybit Bot Private</div>
+            <div class="brand-lockup login-brand">
+                <span class="brand-mark">🦝</span>
+                <span class="brand-name">Crypto<span class="brand-accent">Nasua</span></span>
+            </div>
+            <div class="logo-badge">Private Trading Terminal</div>
             <h2>Авторизація та Реєстрація</h2>
             <p>Увійдіть у власний акаунт або зареєструйтесь для доступу до панелі управління.</p>
             
@@ -55,8 +59,9 @@
         <!-- Top Navigation -->
         <header class="top-nav glass-card">
             <div class="brand">
+                <span class="brand-mark">🦝</span>
+                <h1 class="brand-name">Crypto<span class="brand-accent">Nasua</span></h1>
                 <span class="pulse-dot green"></span>
-                <h1>Crypto Bot Dashboard</h1>
                 <span id="mode-badge" class="badge badge-paper">PAPER TRADING</span>
             </div>
 
@@ -116,8 +121,14 @@
 
         <!-- Full Wallet Breakdown (incl. dust below sellable minimum) -->
         <section id="wallet-holdings-section" class="glass-card section-card hidden" style="margin-bottom: 20px;">
-            <h3>💰 Гаманець (усі монети) <span id="wallet-holdings-count-badge" class="badge badge-paper" style="font-size:0.7rem;">0</span></h3>
+            <div class="chart-header">
+                <h3 style="margin:0;">💰 Гаманець (усі монети) <span id="wallet-holdings-count-badge" class="badge badge-paper" style="font-size:0.7rem;">0</span></h3>
+                <button id="convert-dust-btn" class="btn btn-sm btn-outline" title="Конвертувати залишки, які неможливо продати ордером, у USDT">
+                    ♻️ Конвертувати пил у USDT
+                </button>
+            </div>
             <div id="wallet-holdings-container"></div>
+            <div id="convert-dust-result" class="hidden" style="margin-top:12px;"></div>
         </section>
 
         <!-- Controls Section -->
@@ -245,6 +256,6 @@
         </section>
     </div>
 
-    <script src="/static/app.js?v=20260730_v31"></script>
+    <script src="/static/app.js?v=20260730_v32"></script>
 </body>
 </html>
