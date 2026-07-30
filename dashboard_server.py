@@ -242,6 +242,7 @@ class DashboardServer:
             'min_llm_confidence': config.min_llm_confidence,
             'prevent_sleep': getattr(config, 'prevent_sleep', True),
             'monitor_only': getattr(config, 'monitor_only', False),
+            'market_regime': getattr(self.bot, 'latest_market_regime', {'mode': 'HUNT', 'avg_rsi': 50.0, 'is_overheated': False}),
             'active_positions': active_positions_payload,
             'active_position': active_pos_payload,
             'wallet_holdings': wallet_holdings,

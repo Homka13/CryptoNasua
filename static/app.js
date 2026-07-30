@@ -326,6 +326,24 @@ function initApp() {
                     : "Введіть ваш sk-... ключ тут";
             }
 
+            // Market Regime Stat Card
+            const regimeEl = document.getElementById('stat-market-regime');
+            const regimeSub = document.getElementById('stat-market-regime-sub');
+            if (regimeEl && data.market_regime) {
+                const reg = data.market_regime;
+                if (reg.mode === 'STABLE') {
+                    regimeEl.innerText = '🛡️ STABLE MODE';
+                    regimeEl.className = 'stat-value';
+                    regimeEl.style.color = '#38bdf8';
+                    if (regimeSub) regimeSub.innerText = `Перегрів (Avg RSI: ${reg.avg_rsi} ≥ 65) · Top-5 BTC/ETH`;
+                } else {
+                    regimeEl.innerText = '🔥 HUNT MODE';
+                    regimeEl.className = 'stat-value';
+                    regimeEl.style.color = '#10b981';
+                    if (regimeSub) regimeSub.innerText = `Норма (Avg RSI: ${reg.avg_rsi} < 65) · 25 Альтів`;
+                }
+            }
+
             // Sleep button
             // Reflect monitor-only state from the server, but never fight the user mid-click.
             const monToggle = document.getElementById('monitor-only-toggle');

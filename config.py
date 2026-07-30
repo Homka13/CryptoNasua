@@ -95,6 +95,14 @@ class TradingConfig:
     # would sit through a reversal holding whatever it already owns.
     monitor_only: bool = os.getenv("MONITOR_ONLY", "false").lower() == "true"
 
+    # Dual-Mode Market Scanner (HUNT ↔ STABLE Regime Detection)
+    use_dual_mode_scanner: bool = os.getenv("USE_DUAL_MODE_SCANNER", "true").lower() == "true"
+    market_overheat_rsi_threshold: float = 65.0
+    stable_pairs: list = field(default_factory=lambda: ["BTC/USDT", "ETH/USDT", "BNB/USDT", "SOL/USDT", "XRP/USDT"])
+    stable_mode_rsi_threshold: float = 40.0
+    stable_mode_tp_pct: float = 0.010  # 1.0% TP for Blue Chips
+    stable_mode_sl_pct: float = 0.015  # 1.5% SL for Blue Chips
+
     # Quant Execution Algorithms (Anti-Slippage & Smart Slicing)
     use_limit_offset: bool = True
     limit_offset_pct: float = 0.0015   # 0.15% limit price offset tolerance

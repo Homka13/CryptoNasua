@@ -484,15 +484,38 @@ class TradingBot:
                     if pos.get('symbol') and pos['symbol'] not in symbols_to_scan:
                         symbols_to_scan.insert(0, pos['symbol'])
 
-                # Filter out symbols currently in Cooldown after LLM rejection. Symbols we
-                # actually hold are never filtered: a cooldown blocks new entries, and dropping
-                # a held symbol here would leave the position with no SL/TP/health monitoring.
+                # Filter out symbols currently in Cooldown after LLM rejection.
                 now = time.time()
                 held_symbols = {p.get('symbol') for p in self.active_positions}
                 active_scan_symbols = [
                     s for s in symbols_to_scan
                     if s in held_symbols or now >= self.rejected_cooldowns.get(s, 0)
                 ]
+
+                # --- 🎯 DUAL-MODE MARKET REGIME DETECTION (HUNT ↔ STABLE) ---
+                recent_rsis = []
+                for sym_check in active_scan_symbols[:10]:
+                    meta_cached = self.active_position_metas.get(sym_check) or {}
+                    if meta_cached.get('rsi'):
+                        recent_rsis.append(meta_cached['rsi'])
+
+                avg_market_rsi = (sum(recent_rsis) / len(recent_rsis)) if recent_rsis else 50.0
+                is_overheated = (avg_market_rsi >= config.market_overheat_rsi_threshold)
+
+                if config.use_dual_mode_scanner and is_overheated:
+                    current_regime = "STABLE"
+                    # Inject Top-5 Blue Chip Stable pairs into scanning list
+                    for sp in config.stable_pairs:
+                        if sp not in active_scan_symbols:
+                            active_scan_symbols.append(sp)
+                else:
+                    current_regime = "HUNT"
+
+                self.latest_market_regime = {
+                    'mode': current_regime,
+                    'avg_rsi': round(avg_market_rsi, 1),
+                    'is_overheated': is_overheated
+                }
 
                 # Check BTC Gravity Shield: If Bitcoin is dumping on 5m, pause new altcoin BUY entries
                 btc_is_dumping = self.is_btc_dumping()
@@ -509,7 +532,7 @@ class TradingBot:
                     try:
                         df = self.exchange.fetch_ohlcv(sym, config.timeframe, limit=100)
                         pos_for_sym = self._find_position(sym)
-                        signal, reason, meta = self.strategy.analyze(df, pos_for_sym)
+                        signal, reason, meta = self.strategy.analyze(df, pos_for_sym, symbol=sym)
                         meta['signal'] = signal
                         meta['reason'] = reason
                         meta['symbol'] = sym

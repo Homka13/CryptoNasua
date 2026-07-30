@@ -38,7 +38,7 @@ class HybridStrategy:
 
         return df
 
-    def analyze(self, df: pd.DataFrame, current_position: Dict[str, Any]) -> Tuple[str, str, Dict[str, Any]]:
+    def analyze(self, df: pd.DataFrame, current_position: Any = None, symbol: str = "") -> Tuple[str, str, Dict[str, Any]]:
         """
         Analyzes the latest candle and current position state.
         Returns: (Signal ['BUY', 'SELL', 'HOLD'], Reason, Metadata)
@@ -55,6 +55,10 @@ class HybridStrategy:
         bb_lower_val = float(latest['bb_lower'])
         bb_upper_val = float(latest['bb_upper'])
 
+        is_stable = bool(symbol and symbol in config.stable_pairs)
+        rsi_oversold_target = config.stable_mode_rsi_threshold if is_stable else self.rsi_oversold
+        sl_pct_target = config.stable_mode_sl_pct if is_stable else config.stop_loss_pct
+
         metadata = {
             'price': current_price,
             'rsi': rsi_val,
@@ -62,7 +66,8 @@ class HybridStrategy:
             'ema_slow': ema_slow_val,
             'bb_lower': bb_lower_val,
             'bb_upper': bb_upper_val,
-            'trend': analyze_trend(ema_fast_val, ema_slow_val)
+            'trend': analyze_trend(ema_fast_val, ema_slow_val),
+            'is_stable': is_stable
         }
 
         # 1. Check active position for Trailing Stop / Take-Profit / Stop-Loss
@@ -70,14 +75,14 @@ class HybridStrategy:
             entry_price = current_position['entry_price']
             price_change = (current_price - entry_price) / entry_price
 
-            # --- ⚡ MODULE 1: QUICK SCALPING TRAILING STOP (+1.0% ACTIVATION) ---
+            # --- ⚡ MODULE 1: QUICK SCALPING TRAILING STOP ---
             highest_price = max(current_position.get('highest_price', entry_price), current_price)
             current_position['highest_price'] = highest_price
             peak_gain_pct = (highest_price - entry_price) / entry_price
 
-            # Activate Scalping Trailing Stop when peak gain reaches +1.0% (trailing 0.5% below peak)
-            if peak_gain_pct >= 0.010:
-                trailing_stop_price = highest_price * 0.995  # Trailing 0.5% below peak
+            tp_threshold = config.stable_mode_tp_pct if is_stable else 0.010
+            if peak_gain_pct >= tp_threshold:
+                trailing_stop_price = highest_price * (0.997 if is_stable else 0.995)
                 if current_price <= trailing_stop_price:
                     return 'SELL', f'⚡ QUICK SCALPING PROFIT TAKEN (Peak: +{peak_gain_pct*100:.2f}%, Closed: {price_change*100:+.2f}%)', metadata
 
@@ -85,8 +90,8 @@ class HybridStrategy:
             if price_change >= 0.10:
                 return 'SELL', f'🚀 MAX BLOWOFF TAKE PROFIT (+{price_change*100:.2f}%)', metadata
 
-            # Hard Stop-Loss protection (-2.0%)
-            if price_change <= -config.stop_loss_pct:
+            # Hard Stop-Loss protection
+            if price_change <= -sl_pct_target:
                 return 'SELL', f'🛑 STOP LOSS TRIGGERED ({price_change*100:.2f}%)', metadata
 
             if rsi_val >= self.rsi_overbought:
@@ -96,7 +101,7 @@ class HybridStrategy:
 
         # 2. Check for Buy Entry Opportunities (No active position)
         is_bullish_trend = (metadata['trend'] == 'BULLISH')
-        is_oversold = rsi_val <= self.rsi_oversold
+        is_oversold = rsi_val <= rsi_oversold_target
 
         # --- MODULE 2: BREAKOUT MOMENTUM PUMP SNIPER (24h High + Volume Surge - 0ms Fast Math Execution) ---
         high_24h = float(df_calc['high'].tail(96).max()) if len(df_calc) >= 96 else float(df_calc['high'].max())
@@ -108,7 +113,7 @@ class HybridStrategy:
             metadata['skip_llm'] = True  # Bypass LLM delay for 0ms breakout execution
             return 'BUY', f'⚡ BREAKOUT MOMENTUM PUMP SNIPER (Пробой 24h макс ${high_24h:.4f}, Об\'єм x{vol_ratio:.1f}) [0ms Math]', metadata
 
-        # --- ЛОВЕЦЬ ВІДСКОКІВ (ULTRA-DIP REVERSAL: RSI < 25 + Lower Bollinger Band Piercing) ---
+        # --- ЛОВЕЦЬ ВІДСКОКІВ (ULTRA-DIP REVERSAL: RSI < 25 OR Lower BB Piercing) ---
         prev_candle = df_calc.iloc[-2]
         prev_rsi = float(prev_candle['rsi'])
 
@@ -124,10 +129,14 @@ class HybridStrategy:
 
         # Standard Bullish Trend Oversold Entry
         if is_oversold and is_bullish_trend:
-            return 'BUY', f'🟢 RSI OVERSOLD ({rsi_val:.1f} <= {self.rsi_oversold}) in Bullish Trend', metadata
+            coin_type_tag = " [Blue Chip STABLE]" if is_stable else ""
+            return 'BUY', f'🟢 RSI OVERSOLD ({rsi_val:.1f} <= {rsi_oversold_target}){coin_type_tag} in Bullish Trend', metadata
 
         # Micro-Dip Buy condition: RSI < 45 and price slightly below fast EMA
-        if rsi_val <= 45 and current_price < ema_fast_val and is_bullish_trend:
-            return 'BUY', f'🟢 Micro-Dip Buy (RSI: {rsi_val:.1f}, Price below EMA20)', metadata
+        micro_dip_rsi = 45.0 if not is_stable else 48.0
+        if rsi_val <= micro_dip_rsi and current_price < ema_fast_val and is_bullish_trend:
+            coin_type_tag = " [Blue Chip STABLE]" if is_stable else ""
+            return 'BUY', f'🟢 Micro-Dip Buy ({rsi_val:.1f} <= {micro_dip_rsi}, Price below EMA20){coin_type_tag}', metadata
 
-        return 'HOLD', f'Scanning market (RSI: {rsi_val:.1f}, Trend: {metadata["trend"]})', metadata
+        regime_tag = " [STABLE]" if is_stable else ""
+        return 'HOLD', f'Scanning market (RSI: {rsi_val:.1f}, Trend: {metadata["trend"]}){regime_tag}', metadata
