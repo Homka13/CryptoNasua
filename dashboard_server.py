@@ -22,6 +22,7 @@ class DashboardServer:
 
     def _setup_routes(self):
         self.app.router.add_get('/', self.handle_index)
+        self.app.router.add_get('/favicon.ico', self.handle_favicon)
         self.app.router.add_post('/api/auth/google', self.handle_google_auth)
         self.app.router.add_post('/api/auth/register', self.handle_register)
         self.app.router.add_post('/api/auth/login', self.handle_password_login)
@@ -36,6 +37,9 @@ class DashboardServer:
         static_dir = os.path.join(os.path.dirname(__file__), 'static')
         if os.path.exists(static_dir):
             self.app.router.add_static('/static/', path=static_dir, name='static')
+
+    async def handle_favicon(self, request: web.Request) -> web.Response:
+        return web.Response(status=204)
 
     async def handle_index(self, request: web.Request) -> web.Response:
         static_index = os.path.join(os.path.dirname(__file__), 'static', 'index.html')
