@@ -119,10 +119,8 @@ class HybridStrategy:
 
             if rsi_val >= self.rsi_overbought:
                 if is_breakout_trade:
-                    # Breakout trades: Only exit if RSI rolls over downward below 68 or Trailing Stop hits!
-                    prev_rsi = float(df_calc.iloc[-2]['rsi'])
-                    if rsi_val < prev_rsi and rsi_val < 68.0 and price_change > 0:
-                        return 'SELL', f'⚠️ BREAKOUT RSI ROLLOVER ({rsi_val:.1f} < {prev_rsi:.1f}), фіксуємо прибуток {price_change*100:+.2f}%', metadata
+                    # Breakout trades: FORBIDDEN to exit on RSI Overbought! Exit ONLY via TP, SL, or Trailing Stop.
+                    pass
                 else:
                     return 'SELL', f'⚠️ RSI OVERBOUGHT ({rsi_val:.1f} >= {self.rsi_overbought})', metadata
 

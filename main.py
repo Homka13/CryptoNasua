@@ -323,17 +323,35 @@ class TradingBot:
             return (f"🚨 EMERGENCY EXIT: Тренд перевернувся на BEARISH "
                     f"(EMA{config.ema_fast}={ema_fast:.6f} < EMA{config.ema_slow}={ema_slow:.6f}), PnL: {pnl_pct:+.2f}%")
 
-        # 2. 15-Minute Micro-Profit Bank: If after 15 min (1 full 15m candle) PnL >= +0.20%, exit immediately!
-        if age_minutes >= 15.0 and pnl_pct >= 0.20:
-            return f"💰 15-MIN MICRO-PROFIT EXIT: Зафіксовано чистий прибуток {pnl_pct:+.2f}% за {age_minutes:.1f} хв (покриває комісію + чистий плюс)!"
+        # Dynamic physics-based stagnation timeout by entry module
+        entry_reason = str(position.get('entry_reason', '') or position.get('reason', '')).upper()
+        is_breakout = bool('BREAKOUT' in entry_reason or position.get('is_breakout', False))
+        is_dip = bool('DIP' in entry_reason or 'OVERSOLD' in entry_reason or 'ВІДСКОК' in entry_reason)
 
-        # 3. 15-Minute Fast Scalping Stagnation Exit: If after 15.0 min (1 full 15m candle) price fails to grow to +0.20% — exit immediately!
-        if age_minutes >= 15.0 and pnl_pct < 0.20:
-            return (f"⏰ 15-MIN STAGNATION EXIT: Позиція не виросла вище +0.20% за 1 повну 15m свічку ({age_minutes:.1f} хв, "
-                    f"PnL: {pnl_pct:+.2f}%), вивільняємо депозит для нових угод.")
+        if is_breakout:
+            max_stagnation_time = 10.0  # 10 min for Breakouts (fakeout check)
+            min_required_pnl = 0.30     # Must produce +0.30% momentum
+            module_name = "BREAKOUT"
+        elif is_dip:
+            max_stagnation_time = 25.0  # 25 min for Dip Reversals (liquidity accumulation)
+            min_required_pnl = 0.20     # Lower threshold for bottom bounces
+            module_name = "DIP_REVERSAL"
+        else:
+            max_stagnation_time = 15.0  # Standard fallback
+            min_required_pnl = 0.20
+            module_name = "STANDARD"
 
-        # 4. RSI overheated while in profit — bank it before the pullback.
-        if rsi > config.health_rsi_overheat and pnl_pct > 0:
+        # Module-Specific Micro-Profit Exit: If after max_stagnation_time PnL >= min_required_pnl, lock in profit!
+        if age_minutes >= max_stagnation_time and pnl_pct >= min_required_pnl:
+            return f"💰 {module_name} PROFIT EXIT: Зафіксовано прибуток {pnl_pct:+.2f}% за {age_minutes:.1f} хв!"
+
+        # Module-Specific Stagnation Exit: If after max_stagnation_time PnL < min_required_pnl, cut position!
+        if age_minutes >= max_stagnation_time and pnl_pct < min_required_pnl:
+            return (f"⏰ {module_name} STAGNATION EXIT ({max_stagnation_time:.0f} хв): Позиція не виросла вище +{min_required_pnl:.2f}% "
+                    f"за {age_minutes:.1f} хв (PnL: {pnl_pct:+.2f}%), вивільняємо депозит для нових угод.")
+
+        # RSI overheated while in profit — bank it before the pullback (non-breakout trades).
+        if rsi > config.health_rsi_overheat and pnl_pct > 0 and not is_breakout:
             return f"💰 PROFIT PROTECTION: RSI перегрітий ({rsi:.1f}), фіксуємо прибуток {pnl_pct:+.2f}%"
 
         return None
@@ -481,7 +499,8 @@ class TradingBot:
             'trend': meta.get('trend', 'UNKNOWN')
         })
 
-        effective_cooldown = cooldown_minutes if cooldown_minutes > 0 else 15
+        # Strict 20-minute post-sell cooldown for ALL closed trades to prevent ping-pong re-entries
+        effective_cooldown = max(cooldown_minutes, 20)
         self.rejected_cooldowns[symbol] = time.time() + (effective_cooldown * 60)
         logger.info(f"🔒 {symbol} заблоковано на {effective_cooldown} хв після виходу.")
 
