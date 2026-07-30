@@ -643,13 +643,81 @@ body.dark-theme {
 .alert-danger { background: rgba(244, 63, 94, 0.12); color: #fda4af; border: 1px solid rgba(244, 63, 94, 0.3); }
 
 /* ===== WATCHLIST BAR ===== */
-.watchlist-bar-tabs { display: flex; gap: 6px; overflow-x: auto; padding-bottom: 8px; margin-bottom: 10px; }
+.watchlist-bar-tabs {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    overflow-x: auto;
+    padding-bottom: 10px;
+    margin-bottom: 14px;
+}
 .watchlist-bar-tabs::-webkit-scrollbar { height: 3px; }
 .watchlist-bar-tabs::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.15); border-radius: 3px; }
 
+.watchlist-group-label {
+    flex-shrink: 0;
+    font-size: 0.68rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--text-muted);
+    padding-right: 2px;
+}
+.watchlist-divider {
+    flex-shrink: 0;
+    width: 1px;
+    align-self: stretch;
+    margin: 2px 6px;
+    background: var(--border-visible);
+}
+.watchlist-pill {
+    flex-shrink: 0;
+    padding: 5px 14px;
+    border-radius: 20px;
+    font-size: 0.8rem;
+    font-weight: 700;
+    white-space: nowrap;
+    cursor: pointer;
+    background: rgba(255, 255, 255, 0.04);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    color: var(--text-secondary);
+    transition: all var(--transition);
+}
+.watchlist-pill:hover {
+    color: var(--text-primary);
+    border-color: rgba(255, 255, 255, 0.3);
+}
+.watchlist-pill.position {
+    background: rgba(16, 185, 129, 0.12);
+    border-color: rgba(16, 185, 129, 0.35);
+    color: #6ee7b7;
+}
+.watchlist-pill.selected {
+    background: var(--accent-blue);
+    border-color: var(--accent-blue);
+    color: #fff;
+    box-shadow: 0 0 14px var(--accent-blue-glow);
+}
+.watchlist-pill.position.selected {
+    background: var(--accent-green);
+    border-color: var(--accent-green);
+    color: #fff;
+    box-shadow: 0 0 14px var(--accent-green-glow);
+}
+
+/* ===== CHART SECTION ===== */
+.chart-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 12px;
+    flex-wrap: wrap;
+    gap: 12px;
+}
+
 /* ===== TRADINGVIEW CONTAINER ===== */
 .tradingview-widget-container {
-    height: 480px;
+    height: clamp(420px, 58vh, 680px);
     width: 100%;
     border-radius: 12px;
     overflow: hidden;

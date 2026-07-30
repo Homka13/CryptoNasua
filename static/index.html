@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Crypto Trading Bot — Private Dashboard</title>
-    <link rel="stylesheet" href="/static/style.css?v=20260730_v3">
+    <link rel="stylesheet" href="/static/style.css?v=20260730_v4">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
@@ -187,31 +187,8 @@
             </div>
         </section>
 
-        <!-- Stable Exchange Chart Section (Watchlist Tabs + Stable TradingView) -->
-        <section class="glass-card section-card" style="margin-bottom: 24px; padding: 20px;">
-            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; flex-wrap: wrap; gap: 12px;">
-                <h3 style="margin: 0; display: flex; align-items: center; gap: 8px;">
-                    📊 Інтерактивний Графік <span id="chart-exchange-label" style="color: #f7a600; font-size: 0.8rem; font-weight: bold;">(Bybit Spot)</span>
-                </h3>
-                <div style="display: flex; gap: 8px; align-items: center;">
-                    <span id="chart-pair-title" style="color: #48bb78; font-weight: bold; font-family: monospace; font-size: 1.05rem;">BYBIT:SOLUSDT</span>
-                    <span class="pulse-dot green"></span>
-                </div>
-            </div>
-
-            <!-- Dynamic Watchlist Coin Selector Bar -->
-            <div id="watchlist-bar" class="watchlist-bar-tabs" style="display: flex; gap: 8px; overflow-x: auto; padding-bottom: 10px; margin-bottom: 14px;">
-                <!-- Watchlist coin pills dynamically populated by app.js -->
-            </div>
-
-            <!-- TradingView Widget Frame Container -->
-            <div class="tradingview-widget-container" style="height: 560px; width: 100%; border-radius: 12px; overflow: hidden; border: 1px solid rgba(255,255,255,0.08);">
-                <div id="tradingview_chart_element" style="height: 560px; width: 100%;"></div>
-            </div>
-        </section>
-
         <!-- DUAL PARALLEL FIXED-HEIGHT PANELS GRID -->
-        <section class="dual-panel-grid">
+        <section class="dual-panel-grid" style="margin-bottom: 24px;">
             <!-- Panel 1: Live Screener Stream -->
             <div class="glass-card panel-card-fixed">
                 <div class="panel-header">
@@ -243,8 +220,31 @@
                 </div>
             </div>
         </section>
+
+        <!-- Stable Exchange Chart Section (Watchlist Tabs + Stable TradingView) -->
+        <section class="glass-card section-card" style="padding: 20px;">
+            <div class="chart-header">
+                <h3 style="margin: 0; display: flex; align-items: center; gap: 8px;">
+                    📊 Інтерактивний Графік <span id="chart-exchange-label" style="color: #f7a600; font-size: 0.8rem; font-weight: bold;">(Bybit Spot)</span>
+                </h3>
+                <div style="display: flex; gap: 8px; align-items: center;">
+                    <span id="chart-pair-title" style="color: #48bb78; font-weight: bold; font-family: monospace; font-size: 1.05rem;">BYBIT:SOLUSDT</span>
+                    <span class="pulse-dot green"></span>
+                </div>
+            </div>
+
+            <!-- Dynamic Watchlist Coin Selector Bar (positions first, then live scan scope) -->
+            <div id="watchlist-bar" class="watchlist-bar-tabs">
+                <!-- Watchlist coin pills dynamically populated by app.js -->
+            </div>
+
+            <!-- TradingView Widget Frame Container -->
+            <div class="tradingview-widget-container">
+                <div id="tradingview_chart_element" style="height: 100%; width: 100%;"></div>
+            </div>
+        </section>
     </div>
 
-    <script src="/static/app.js?v=20260730_v30"></script>
+    <script src="/static/app.js?v=20260730_v31"></script>
 </body>
 </html>

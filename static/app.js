@@ -369,15 +369,8 @@ function initApp() {
             renderActivePositions(positions);
             renderWalletHoldings(data.wallet_holdings || []);
 
-            // Set default chart symbol
-            if (!currentChartSymbol) {
-                if (positions.length > 0) {
-                    currentChartSymbol = positions[0].symbol;
-                } else {
-                    currentChartSymbol = 'SOL/USDT';
-                }
-            }
-
+            // Chart symbol selection is handled inside updateWatchlistBar, which keeps it
+            // pinned to an open position (unless the user picked something else).
             updateWatchlistBar(data.scan_logs, positions);
             updateTradingViewChart(currentChartSymbol, false);
 
@@ -741,8 +734,10 @@ function initApp() {
 }
 
 // ===== TRADINGVIEW CHART =====
-let currentChartSymbol = 'SOL/USDT';
-let activeWatchlist = ['SOL/USDT', 'WLD/USDT', 'PUMP/USDT', 'PEPE/USDT', 'SHIB/USDT', 'CHIP/USDT', 'BIRB/USDT', 'BTC/USDT', 'ETH/USDT'];
+let currentChartSymbol = '';
+// Shown only until the first scan results arrive, so the bar is never empty on load.
+const fallbackWatchlist = ['BTC/USDT', 'ETH/USDT', 'SOL/USDT'];
+let userPickedChartSymbol = false;
 let tvWidgetInstance = null;
 let currentTvSymbol = '';
 
@@ -755,44 +750,76 @@ function updateWatchlistBar(scannedLogs, activePositions) {
     const bar = document.getElementById('watchlist-bar');
     if (!bar) return;
 
-    const symbolsSet = new Set(activeWatchlist);
-    if (activePositions && activePositions.length > 0) {
-        activePositions.forEach(p => { if (p.symbol) symbolsSet.add(p.symbol); });
-    }
-    if (scannedLogs && scannedLogs.length > 0) {
-        scannedLogs.forEach(l => { if (l.symbol && !l.symbol.includes('AUTO')) symbolsSet.add(l.symbol); });
+    // Open positions come first — they are what actually matters right now.
+    const positionSyms = [];
+    (activePositions || []).forEach(p => {
+        if (p.symbol && !positionSyms.includes(p.symbol)) positionSyms.push(p.symbol);
+    });
+
+    // Then the live scan scope. scan_logs arrive newest-first, so keeping the first
+    // occurrence of each symbol gives the freshest scope and drops coins the bot
+    // has stopped scanning.
+    const scopeSyms = [];
+    (scannedLogs || []).forEach(l => {
+        const sym = l.symbol;
+        if (!sym || sym.includes('AUTO')) return;
+        if (positionSyms.includes(sym) || scopeSyms.includes(sym)) return;
+        scopeSyms.push(sym);
+    });
+    if (positionSyms.length === 0 && scopeSyms.length === 0) {
+        scopeSyms.push(...fallbackWatchlist);
     }
 
-    const symbols = Array.from(symbolsSet).slice(0, 15);
+    // Keep the chart on something that still exists in the bar.
+    const allSyms = positionSyms.concat(scopeSyms);
+    if (!currentChartSymbol || !allSyms.includes(currentChartSymbol)) {
+        currentChartSymbol = allSyms[0];
+        userPickedChartSymbol = false;
+        updateTradingViewChart(currentChartSymbol, true);
+    } else if (!userPickedChartSymbol && positionSyms.length > 0 && currentChartSymbol !== positionSyms[0]) {
+        // A position just opened — surface it instead of whatever was auto-picked before.
+        currentChartSymbol = positionSyms[0];
+        updateTradingViewChart(currentChartSymbol, true);
+    }
+
     bar.innerHTML = '';
 
-    const activeSyms = new Set((activePositions || []).map(p => p.symbol));
-
-    symbols.forEach(sym => {
+    const makePill = (sym, isPosition) => {
         const btn = document.createElement('button');
         const isSelected = (sym === currentChartSymbol);
-        const isActivePos = activeSyms.has(sym);
-
-        let btnClass = 'btn btn-sm ';
-        if (isSelected) btnClass += 'btn-primary';
-        else if (isActivePos) btnClass += 'btn-success';
-        else btnClass += 'btn-outline';
-
-        btn.className = btnClass;
-        btn.style.borderRadius = '20px';
-        btn.style.whiteSpace = 'nowrap';
-        btn.style.padding = '4px 14px';
-        btn.style.fontSize = '0.8rem';
-        btn.style.fontWeight = 'bold';
-
-        btn.innerHTML = `${isActivePos ? '📌 ' : ''}${sym}`;
+        btn.className = 'watchlist-pill'
+            + (isSelected ? ' selected' : '')
+            + (isPosition ? ' position' : '');
+        btn.innerHTML = `${isPosition ? '📌 ' : ''}${sym}`;
         btn.onclick = () => {
             currentChartSymbol = sym;
+            userPickedChartSymbol = true;
             updateWatchlistBar(scannedLogs, activePositions);
             updateTradingViewChart(sym, true);
         };
-        bar.appendChild(btn);
-    });
+        return btn;
+    };
+
+    const makeGroupLabel = (text) => {
+        const span = document.createElement('span');
+        span.className = 'watchlist-group-label';
+        span.innerText = text;
+        return span;
+    };
+
+    if (positionSyms.length > 0) {
+        bar.appendChild(makeGroupLabel('Позиції'));
+        positionSyms.forEach(sym => bar.appendChild(makePill(sym, true)));
+        if (scopeSyms.length > 0) {
+            const divider = document.createElement('span');
+            divider.className = 'watchlist-divider';
+            bar.appendChild(divider);
+        }
+    }
+    if (scopeSyms.length > 0) {
+        bar.appendChild(makeGroupLabel('У моніторингу'));
+        scopeSyms.forEach(sym => bar.appendChild(makePill(sym, false)));
+    }
 }
 
 function updateTradingViewChart(symbolStr, forceUpdate = false) {
