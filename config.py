@@ -62,9 +62,9 @@ class TradingConfig:
     multi_pair_scan: bool = os.getenv("MULTI_PAIR_SCAN", "true").lower() == "true"
     timeframe: str = os.getenv("TIMEFRAME", "15m")
     initial_capital: float = float(os.getenv("INITIAL_CAPITAL", "10.0"))
-    trade_size_usdt: float = float(os.getenv("TRADE_SIZE_USDT", "5.50"))
+    trade_size_usdt: float = float(os.getenv("TRADE_SIZE_USDT", "5.00"))
     max_active_orders: int = 3
-    min_order_usdt: float = 5.50  # 5.50 USDT safety buffer to clear Bybit/Binance MIN_NOTIONAL ($5.00) rules
+    min_order_usdt: float = 5.00  # 5.00 USDT floor to clear Bybit/Binance MIN_NOTIONAL ($5.00) rules
 
     # Risk Management
     max_trade_pct: float = 0.45   # 45% compound trade allocation

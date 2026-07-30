@@ -70,7 +70,7 @@ class TradingBot:
         self.active_position_metas: Dict[str, Dict[str, Any]] = {}
         self.rejected_cooldowns: Dict[str, float] = {}
         self.scan_logs = deque(maxlen=30)
-        self.ai_verdicts = deque(maxlen=30)
+        self.ai_verdicts: deque = self._load_ai_verdicts()
         self.max_concurrent_positions = 3
 
         # Trading active flag and daily trade counter for micro-capital protection
@@ -83,6 +83,29 @@ class TradingBot:
             get_status_fn=self.get_bot_status_str,
             get_balance_fn=self.get_balance_str
         )
+
+    def _load_ai_verdicts(self) -> deque:
+        verdicts_file = os.path.join(os.path.dirname(__file__), "data", "ai_verdicts.json")
+        items = []
+        if os.path.exists(verdicts_file):
+            try:
+                with open(verdicts_file, 'r', encoding='utf-8') as f:
+                    items = json.load(f)
+                    if not isinstance(items, list):
+                        items = []
+            except Exception as e:
+                logger.error(f"Error loading ai_verdicts.json: {e}")
+        return deque(items, maxlen=300)
+
+    def _save_ai_verdicts(self) -> None:
+        data_dir = os.path.join(os.path.dirname(__file__), "data")
+        os.makedirs(data_dir, exist_ok=True)
+        verdicts_file = os.path.join(data_dir, "ai_verdicts.json")
+        try:
+            with open(verdicts_file, 'w', encoding='utf-8') as f:
+                json.dump(list(self.ai_verdicts), f, indent=2)
+        except Exception as e:
+            logger.error(f"Error saving ai_verdicts.json: {e}")
 
     def _load_trade_history(self) -> deque:
         history_file = os.path.join(os.path.dirname(__file__), "data", "trade_history.json")
@@ -800,6 +823,7 @@ class TradingBot:
                         'provider': config.llm_provider.upper()
                     }
                     self.ai_verdicts.appendleft(verdict_record)
+                    self._save_ai_verdicts()
 
                     # Add prominent entry into live scan logs feed
                     ai_icon = "🟢 DEEPSEEK CONFIRMED" if is_confirmed else "🛑 DEEPSEEK REJECTED"
