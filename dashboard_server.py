@@ -176,6 +176,8 @@ class DashboardServer:
         # Build enriched active positions payload with live meta
         active_positions_payload = []
         for pos in getattr(self.bot, 'active_positions', []):
+            if pos.get('is_paper', config.paper_trading) != config.paper_trading:
+                continue
             pos_payload = dict(pos)
             pos_sym = pos_payload.get('symbol')
             pos_metas = getattr(self.bot, 'active_position_metas', {})
@@ -247,12 +249,21 @@ class DashboardServer:
             'prevent_sleep': getattr(config, 'prevent_sleep', True),
             'monitor_only': getattr(config, 'monitor_only', False),
             'market_regime': getattr(self.bot, 'latest_market_regime', {'mode': 'HUNT', 'avg_rsi': 50.0, 'is_overheated': False}),
+            'ai_risk_regime': {
+                'regime': getattr(config, 'current_ai_regime', 'ATTACK'),
+                'reason': getattr(config, 'ai_regime_reason', '🟢 Початковий режим атаки за замовчуванням'),
+                'defense_paused_until': getattr(config, 'defense_paused_until', 0.0),
+                'is_defense_active': time.time() < getattr(config, 'defense_paused_until', 0.0),
+                'last_briefing_time': getattr(config, 'last_briefing_time', 0.0),
+                'stats': self.bot.get_trade_statistics() if hasattr(self.bot, 'get_trade_statistics') else {},
+                'learning_lessons': (json.load(open("data/ai_learning_memory.json", "r", encoding="utf-8")) if os.path.exists("data/ai_learning_memory.json") else [])
+            },
             'active_positions': active_positions_payload,
             'active_position': active_pos_payload,
             'wallet_holdings': wallet_holdings,
             'max_concurrent_positions': getattr(self.bot, 'max_concurrent_positions', 3),
             'scan_logs': list(getattr(self.bot, 'scan_logs', [])),
-            'ai_verdicts': list(getattr(self.bot, 'ai_verdicts', []))
+            'ai_verdicts': [v for v in list(getattr(self.bot, 'ai_verdicts', [])) if v.get('is_paper', config.paper_trading) == config.paper_trading]
         }
         return web.json_response(payload)
 
@@ -260,14 +271,12 @@ class DashboardServer:
         if not self._verify_session(request):
             return web.json_response({'error': 'Unauthorized'}, status=401)
 
-        # Trade actions are the primary data — every BUY/SELL execution
-        trade_actions = list(getattr(self.bot, 'trade_actions', []))
-        # Also include AI verdicts for transparency
-        verdicts = list(getattr(self.bot, 'ai_verdicts', []))
-        # Fallback: legacy closed_orders from exchange adapter
+        raw_actions = list(getattr(self.bot, 'trade_actions', []))
+        trade_actions = [t for t in raw_actions if t.get('is_paper', config.paper_trading) == config.paper_trading]
+        raw_verdicts = list(getattr(self.bot, 'ai_verdicts', []))
+        verdicts = [v for v in raw_verdicts if v.get('is_paper', config.paper_trading) == config.paper_trading]
         legacy_orders = getattr(self.bot.exchange, 'closed_orders', []) if self.bot.exchange else []
 
-        # Combine: trade actions first, then verdicts, then legacy orders
         seen_ids = set()
         all_items = []
         for item in trade_actions + verdicts + legacy_orders:
@@ -290,7 +299,7 @@ class DashboardServer:
             return web.json_response({'error': 'Unauthorized'}, status=401)
 
         raw_actions = list(getattr(self.bot, 'trade_actions', []))
-        trade_actions = [t for t in raw_actions if t.get('status') == 'FILLED']
+        trade_actions = [t for t in raw_actions if t.get('status') == 'FILLED' and t.get('is_paper', config.paper_trading) == config.paper_trading]
         return web.json_response({
             'success': True,
             'total_trades': len(trade_actions),
@@ -303,7 +312,7 @@ class DashboardServer:
             return web.json_response({'error': 'Unauthorized'}, status=401)
 
         raw_actions = list(getattr(self.bot, 'trade_actions', []))
-        trade_actions = [t for t in raw_actions if t.get('status') == 'FILLED']
+        trade_actions = [t for t in raw_actions if t.get('status') == 'FILLED' and t.get('is_paper', config.paper_trading) == config.paper_trading]
         csv_lines = ["Time,Symbol,Side,Amount,Price,EntryPrice,PnL_Pct,PnL_USDT,Status,Reason\n"]
         for t in trade_actions:
             line = f"{t.get('time','')},{t.get('symbol','')},{t.get('side','')},{t.get('amount',0)},{t.get('price',0)},{t.get('entry_price',0)},{t.get('pnl_pct',0)},{t.get('pnl_usdt',0)},{t.get('status','')},\"{t.get('reason','')}\"\n"
@@ -362,8 +371,13 @@ class DashboardServer:
                 return web.json_response({'success': True, 'prevent_sleep': config.prevent_sleep})
             elif action == 'toggle_mode':
                 config.paper_trading = not config.paper_trading
+                config.save_persisted_config()
                 from exchanges.exchange_factory import ExchangeFactory
                 self.bot.exchange = ExchangeFactory.create_adapter()
+                self.bot.active_positions = self.bot._load_positions()
+                self.bot.trade_actions = self.bot._load_trade_history()
+                self.bot.ai_verdicts = self.bot._load_ai_verdicts()
+                self.bot._sync_wallet_positions()
                 logger.info(f"🌐 Execution Mode Toggled via Dashboard: {'PAPER TRADING ($10)' if config.paper_trading else 'LIVE CEX REAL'}")
                 return web.json_response({'success': True, 'paper_trading': config.paper_trading})
             elif action == 'close_position':
@@ -419,19 +433,55 @@ class DashboardServer:
                 })
             elif action == 'set_exchange':
                 ex_name = body.get('exchange', 'bybit').lower()
-                if ex_name in ('bybit', 'binance'):
-                    config.active_exchange = ex_name
-                    config.exchange_name = ex_name
-                    from exchanges.exchange_factory import ExchangeFactory
+                if ex_name not in ('bybit', 'binance'):
+                    return web.json_response({'success': False, 'error': 'Invalid exchange choice'}, status=400)
+
+                # Switching to an exchange with no credentials silently produced a live
+                # adapter that could scan but never trade, surfacing only as $0 balance.
+                # Refuse the switch and say which keys are missing instead.
+                if not config.paper_trading:
+                    if ex_name == 'binance':
+                        has_creds = bool(getattr(config, 'binance_api_key', '').strip()
+                                         and getattr(config, 'binance_api_secret', '').strip())
+                        missing = 'BINANCE_API_KEY та BINANCE_API_SECRET'
+                    else:
+                        has_creds = bool(config.bybit_api_key.strip()) and (
+                            bool(config.bybit_api_secret.strip())
+                            or bool(getattr(config, 'bybit_private_key_path', ''))
+                            or os.path.exists('bybit_rsa_private.pem')
+                        )
+                        missing = 'BYBIT_API_KEY та BYBIT_API_SECRET (або RSA-ключ)'
+                    if not has_creds:
+                        logger.warning(f"🌐 Exchange switch to {ex_name.upper()} refused: credentials missing")
+                        return web.json_response({
+                            'success': False,
+                            'error': f'{ex_name.upper()}: не налаштовані ключі. Додайте {missing} у файл .env і перезапустіть бота.'
+                        }, status=400)
+
+                prev_exchange = getattr(config, 'active_exchange', 'bybit')
+                config.active_exchange = ex_name
+                config.exchange_name = ex_name
+                from exchanges.exchange_factory import ExchangeFactory
+                try:
                     self.bot.exchange = ExchangeFactory.create_adapter()
-                    logger.info(f"🌐 Active Exchange Switched via Web Dashboard UI to: {ex_name.upper()}")
-                    return web.json_response({'success': True, 'exchange': ex_name})
-                return web.json_response({'success': False, 'error': 'Invalid exchange choice'}, status=400)
+                except Exception as e:
+                    config.active_exchange = prev_exchange
+                    config.exchange_name = prev_exchange
+                    logger.error(f"Exchange switch to {ex_name.upper()} failed: {e}")
+                    return web.json_response({'success': False, 'error': f'{ex_name.upper()}: {e}'}, status=400)
+
+                logger.info(f"🌐 Active Exchange Switched via Web Dashboard UI to: {ex_name.upper()}")
+                return web.json_response({'success': True, 'exchange': ex_name})
             elif action == 'set_execution_mode':
                 mode = body.get('mode', 'paper')
                 config.paper_trading = (mode.lower() == 'paper')
+                config.save_persisted_config()
                 from exchanges.exchange_factory import ExchangeFactory
                 self.bot.exchange = ExchangeFactory.create_adapter()
+                self.bot.active_positions = self.bot._load_positions()
+                self.bot.trade_actions = self.bot._load_trade_history()
+                self.bot.ai_verdicts = self.bot._load_ai_verdicts()
+                self.bot._sync_wallet_positions()
                 logger.info(f"🌐 Execution Mode Switched via Dashboard: {'PAPER TRADING' if config.paper_trading else 'LIVE CEX REAL'}")
                 return web.json_response({'success': True, 'paper_trading': config.paper_trading})
             elif action == 'toggle_llm':
@@ -505,6 +555,11 @@ class DashboardServer:
                     masked = f"{new_key[:6]}...{new_key[-4:]}" if len(new_key) > 8 else "set"
                     return web.json_response({'success': True, 'message': 'API Key set successfully', 'key_masked': masked})
                 return web.json_response({'success': False, 'error': 'Key cannot be empty'}, status=400)
+            elif action == 'trigger_ai_briefing':
+                if hasattr(self.bot, 'run_ai_risk_manager_briefing'):
+                    res = await self.bot.run_ai_risk_manager_briefing(force=True)
+                    return web.json_response({'success': True, 'briefing_result': res})
+                return web.json_response({'success': False, 'error': 'Briefing not supported'}, status=400)
 
             return web.json_response({'success': False, 'error': 'Unknown action'}, status=400)
         except Exception as e:

@@ -190,8 +190,9 @@ function initApp() {
                 // Only allow switching between bybit and binance via these tabs
                 if (platform === 'paper') return;
 
+                const previousPlatform = currentPlatform;
                 setActivePlatformTab(platform);
-                await switchPlatform(platform);
+                await switchPlatform(platform, previousPlatform);
             });
         });
     }
@@ -206,12 +207,31 @@ function initApp() {
         });
     }
 
-    async function switchPlatform(platform) {
-        await fetch('/api/control', {
-            method: 'POST',
-            headers: { 'Authorization': `Bearer ${getAuthToken()}`, 'Content-Type': 'application/json' },
-            body: JSON.stringify({ action: 'set_exchange', exchange: platform })
-        });
+    async function switchPlatform(platform, previousPlatform) {
+        // The response was previously ignored, so a refused switch (e.g. missing API keys)
+        // still moved the tab and the UI claimed an exchange the backend never selected.
+        let ok = false;
+        let errorMsg = '';
+        try {
+            const resp = await fetch('/api/control', {
+                method: 'POST',
+                headers: { 'Authorization': `Bearer ${getAuthToken()}`, 'Content-Type': 'application/json' },
+                body: JSON.stringify({ action: 'set_exchange', exchange: platform })
+            });
+            const data = await resp.json();
+            ok = !!data.success;
+            errorMsg = data.error || '';
+        } catch (err) {
+            errorMsg = err.message;
+        }
+
+        if (!ok) {
+            setActivePlatformTab(previousPlatform);
+            showPlatformError(errorMsg || 'Не вдалося перемкнути біржу');
+            return;
+        }
+
+        clearPlatformError();
         // Force chart update with new exchange
         if (tvWidgetInstance) {
             try { tvWidgetInstance.remove(); } catch(e) {}
@@ -219,6 +239,23 @@ function initApp() {
             currentTvSymbol = '';
         }
         fetchStatus();
+    }
+
+    function showPlatformError(msg) {
+        let box = document.getElementById('platform-error');
+        if (!box) {
+            box = document.createElement('div');
+            box.id = 'platform-error';
+            box.className = 'alert-box alert-danger';
+            box.style.marginTop = '10px';
+            document.querySelector('.top-nav')?.appendChild(box);
+        }
+        box.innerText = `⚠️ ${msg}`;
+        box.classList.remove('hidden');
+    }
+
+    function clearPlatformError() {
+        document.getElementById('platform-error')?.classList.add('hidden');
     }
 
     // ===== STATUS POLLING =====
@@ -344,6 +381,55 @@ function initApp() {
                     regimeEl.style.color = '#10b981';
                     if (regimeSub) regimeSub.innerText = `Норма (Avg RSI: ${reg.avg_rsi} < 65) · 25 Альтів`;
                 }
+            }
+
+            // AI Chief Risk Manager (Regime Switching & Statistical Feedback) UI Rendering
+            const aiRegime = data.ai_risk_regime || {};
+            const aiBadge = document.getElementById('ai-regime-badge');
+            const aiReasonEl = document.getElementById('ai-regime-reason');
+            const aiWinRateEl = document.getElementById('ai-win-rate');
+            const aiStopsEl = document.getElementById('ai-consec-stops');
+            const aiPnlEl = document.getElementById('ai-total-pnl');
+
+            const currentRegime = (aiRegime.regime || 'ATTACK').toUpperCase();
+            if (aiBadge) {
+                if (currentRegime === 'DEFENSE') {
+                    aiBadge.innerText = '🔴 DEFENSE MODE';
+                    aiBadge.style.background = '#ef4444';
+                    aiBadge.style.color = '#ffffff';
+                } else if (currentRegime === 'CAUTION') {
+                    aiBadge.innerText = '🟡 CAUTION MODE';
+                    aiBadge.style.background = '#eab308';
+                    aiBadge.style.color = '#000000';
+                } else {
+                    aiBadge.innerText = '🟢 ATTACK MODE';
+                    aiBadge.style.background = '#22c55e';
+                    aiBadge.style.color = '#ffffff';
+                }
+            }
+
+            if (aiReasonEl) {
+                aiReasonEl.innerText = aiRegime.reason || 'Аналіз статистики угод триває...';
+            }
+
+            const aiLearningEl = document.getElementById('ai-learning-insight');
+            if (aiLearningEl) {
+                const lessons = aiRegime.learning_lessons || [];
+                if (lessons.length > 0) {
+                    const topLesson = lessons[0];
+                    aiLearningEl.innerText = `🎓 Урок ШІ [${topLesson.symbol}]: ${topLesson.lesson}`;
+                } else {
+                    aiLearningEl.innerText = `🎓 Навчальний висновок ШІ: Модуль авто-навчання активовано. Аналіз угод у реальному часі.`;
+                }
+            }
+
+            const aiStats = aiRegime.stats || {};
+            if (aiWinRateEl) aiWinRateEl.innerText = `${aiStats.win_rate !== undefined ? aiStats.win_rate : 0.0}%`;
+            if (aiStopsEl) aiStopsEl.innerText = `${aiStats.consecutive_losses || 0}`;
+            if (aiPnlEl) {
+                const pnl = aiStats.total_pnl_usdt || 0.0;
+                aiPnlEl.innerText = `$${pnl >= 0 ? '+' : ''}${pnl.toFixed(4)}`;
+                aiPnlEl.style.color = pnl >= 0 ? '#48bb78' : '#f56565';
             }
 
             // Sleep button
@@ -766,7 +852,10 @@ function initApp() {
         const totalPnlBadge = document.getElementById('history-total-pnl');
         if (!tbody) return;
 
-        if (!tradeActions || tradeActions.length === 0) {
+        // Filter completed closed trades (SELL)
+        const closedTrades = (tradeActions || []).filter(ta => ta.side === 'SELL' && (ta.status === 'FILLED' || !ta.status));
+
+        if (closedTrades.length === 0) {
             tbody.innerHTML = `<tr><td colspan="7" class="empty-positions" style="text-align:center; padding: 24px; color: var(--text-muted);">Очікування перших закритих угод...</td></tr>`;
             if (countBadge) countBadge.innerText = '0 угод';
             if (totalPnlBadge) {
@@ -776,34 +865,41 @@ function initApp() {
             return;
         }
 
-        if (countBadge) countBadge.innerText = `${tradeActions.length} угод`;
+        if (countBadge) countBadge.innerText = `${closedTrades.length} угод`;
 
         let cumPnlPct = 0.0;
-        const rowsHtml = tradeActions.map(ta => {
-            const isBuy = ta.side === 'BUY';
-            const isSell = ta.side === 'SELL';
-            const badgeClass = isBuy ? 'buy' : 'sell';
-            const badgeIcon = isBuy ? '🟢' : '🔴';
+        const rowsHtml = closedTrades.map(ta => {
+            const pnlVal = ta.pnl_pct !== null && ta.pnl_pct !== undefined ? ta.pnl_pct : 0.0;
+            const pnlUsdt = ta.pnl_usdt !== null && ta.pnl_usdt !== undefined ? ta.pnl_usdt : 0.0;
+            cumPnlPct += pnlVal;
 
-            const pnlVal = (isSell && ta.pnl_pct !== null && ta.pnl_pct !== undefined) ? ta.pnl_pct : null;
-            if (pnlVal !== null) cumPnlPct += pnlVal;
+            const pnlColor = pnlVal >= 0 ? '#10b981' : '#f43f5e';
+            const pnlSign = pnlVal >= 0 ? '+' : '';
+            const pnlUsdtSign = pnlUsdt >= 0 ? '+' : '';
 
-            const pnlStr = pnlVal !== null
-                ? `<span style="color:${pnlVal >= 0 ? '#10b981' : '#f43f5e'}; font-weight:bold; font-family:monospace;">${pnlVal >= 0 ? '+' : ''}${pnlVal.toFixed(2)}%</span>`
-                : '<span style="color:#718096;">—</span>';
+            // Derive entry time
+            let entryTimeStr = ta.entry_time || ta.time || '—';
+            if (!ta.entry_time && tradeActions) {
+                const buyMatch = tradeActions.find(b => b.side === 'BUY' && b.symbol === ta.symbol && b.timestamp && b.timestamp <= ta.timestamp);
+                if (buyMatch && buyMatch.time) {
+                    entryTimeStr = buyMatch.time;
+                }
+            }
 
-            const priceStr = isSell && ta.entry_price
-                ? `$${fmtPrice(ta.entry_price)} → <strong style="color:#e2e8f0;">$${fmtPrice(ta.price)}</strong>`
-                : `$${fmtPrice(ta.price)}`;
+            const entryPriceStr = ta.entry_price ? `$${fmtPrice(ta.entry_price)}` : '—';
+            const exitPriceStr = ta.price ? `$${fmtPrice(ta.price)}` : '—';
+            const amountStr = ta.amount ? ta.amount.toFixed(4) : '—';
 
-            return `<tr style="border-bottom: 1px solid rgba(255,255,255,0.05);">
-                <td style="padding: 10px 12px; color: var(--text-muted); font-family: monospace; font-size: 0.78rem;">${ta.time || '—'}</td>
-                <td style="padding: 10px 12px; font-weight: bold; color: #93bbfd;">${ta.symbol || '—'}</td>
-                <td style="padding: 10px 12px;"><span class="trade-action-badge ${badgeClass}">${badgeIcon} ${ta.side}</span></td>
-                <td style="padding: 10px 12px; font-family: monospace;">${ta.amount ? ta.amount.toFixed(4) : '—'}</td>
-                <td style="padding: 10px 12px; font-size: 0.8rem;">${priceStr}</td>
-                <td style="padding: 10px 12px;">${pnlStr}</td>
-                <td style="padding: 10px 12px; color: var(--text-secondary); font-size: 0.78rem;">${ta.reason || '—'}</td>
+            return `<tr style="border-bottom: 1px solid rgba(255,255,255,0.05); transition: background 0.15s;" onmouseover="this.style.background='rgba(255,255,255,0.03)'" onmouseout="this.style.background='transparent'">
+                <td style="padding: 9px 10px; color: var(--text-muted); font-family: monospace; font-size: 0.78rem;">${entryTimeStr}</td>
+                <td style="padding: 9px 10px; font-weight: bold; color: #93bbfd;">${ta.symbol || '—'}</td>
+                <td style="padding: 9px 10px; font-family: monospace; color: #cbd5e0; font-size: 0.8rem;">${entryPriceStr}</td>
+                <td style="padding: 9px 10px; font-family: monospace; color: #e2e8f0; font-weight: 600; font-size: 0.8rem;">${exitPriceStr}</td>
+                <td style="padding: 9px 10px; font-family: monospace; color: #a0aec0; font-size: 0.8rem;">${amountStr}</td>
+                <td style="padding: 9px 10px; font-family: monospace; font-weight: bold; color: ${pnlColor}; font-size: 0.82rem;">
+                    ${pnlSign}${pnlVal.toFixed(2)}% <span style="font-size:0.71rem; opacity:0.8;">(${pnlUsdtSign}$${pnlUsdt.toFixed(4)})</span>
+                </td>
+                <td style="padding: 9px 10px; color: var(--text-secondary); font-size: 0.78rem; line-height: 1.3;">${ta.reason || '—'}</td>
             </tr>`;
         }).join('');
 
@@ -908,6 +1004,7 @@ function initApp() {
                 body: JSON.stringify({ action: 'set_execution_mode', mode: isPaperNow ? 'live' : 'paper' })
             });
             fetchStatus();
+            fetchHistory();
         }
     });
 
@@ -918,6 +1015,7 @@ function initApp() {
             body: JSON.stringify({ action: 'set_execution_mode', mode: 'paper' })
         });
         fetchStatus();
+        fetchHistory();
     });
 
     document.getElementById('btn-exec-live')?.addEventListener('click', async () => {
@@ -928,6 +1026,7 @@ function initApp() {
                 body: JSON.stringify({ action: 'set_execution_mode', mode: 'live' })
             });
             fetchStatus();
+            fetchHistory();
         }
     });
 

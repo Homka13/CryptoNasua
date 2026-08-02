@@ -85,59 +85,115 @@ class TradingBot:
         )
 
     def _load_ai_verdicts(self) -> deque:
-        verdicts_file = os.path.join(os.path.dirname(__file__), "data", "ai_verdicts.json")
+        data_dir = os.path.join(os.path.dirname(__file__), "data")
+        file_name = "paper_ai_verdicts.json" if config.paper_trading else "live_ai_verdicts.json"
+        verdicts_file = os.path.join(data_dir, file_name)
+        legacy_file = os.path.join(data_dir, "ai_verdicts.json")
+
+        target_file = verdicts_file
+        if not os.path.exists(verdicts_file) and os.path.exists(legacy_file):
+            if config.paper_trading:
+                target_file = legacy_file
+
         items = []
-        if os.path.exists(verdicts_file):
+        if os.path.exists(target_file):
             try:
-                with open(verdicts_file, 'r', encoding='utf-8') as f:
-                    items = json.load(f)
-                    if not isinstance(items, list):
-                        items = []
+                with open(target_file, 'r', encoding='utf-8') as f:
+                    raw_items = json.load(f)
+                    if isinstance(raw_items, list):
+                        for item in raw_items:
+                            if not isinstance(item, dict):
+                                continue
+                            item_is_paper = item.get('is_paper', True if target_file == legacy_file else config.paper_trading)
+                            if item_is_paper == config.paper_trading:
+                                item['is_paper'] = item_is_paper
+                                items.append(item)
             except Exception as e:
-                logger.error(f"Error loading ai_verdicts.json: {e}")
+                logger.error(f"Error loading {target_file}: {e}")
+
+        if target_file == legacy_file and config.paper_trading and items:
+            try:
+                with open(verdicts_file, 'w', encoding='utf-8') as f:
+                    json.dump(items, f, indent=2)
+            except Exception as e:
+                logger.error(f"Error migrating legacy ai verdicts: {e}")
+
         return deque(items, maxlen=300)
 
     def _save_ai_verdicts(self) -> None:
         data_dir = os.path.join(os.path.dirname(__file__), "data")
         os.makedirs(data_dir, exist_ok=True)
-        verdicts_file = os.path.join(data_dir, "ai_verdicts.json")
+        file_name = "paper_ai_verdicts.json" if config.paper_trading else "live_ai_verdicts.json"
+        verdicts_file = os.path.join(data_dir, file_name)
         try:
+            for item in self.ai_verdicts:
+                if isinstance(item, dict):
+                    item['is_paper'] = config.paper_trading
             with open(verdicts_file, 'w', encoding='utf-8') as f:
                 json.dump(list(self.ai_verdicts), f, indent=2)
         except Exception as e:
-            logger.error(f"Error saving ai_verdicts.json: {e}")
+            logger.error(f"Error saving {file_name}: {e}")
 
     def _load_trade_history(self) -> deque:
-        history_file = os.path.join(os.path.dirname(__file__), "data", "trade_history.json")
+        data_dir = os.path.join(os.path.dirname(__file__), "data")
+        file_name = "paper_trade_history.json" if config.paper_trading else "live_trade_history.json"
+        history_file = os.path.join(data_dir, file_name)
+        legacy_file = os.path.join(data_dir, "trade_history.json")
+
+        target_file = history_file
+        if not os.path.exists(history_file) and os.path.exists(legacy_file):
+            target_file = legacy_file
+
         items = []
-        if os.path.exists(history_file):
+        if os.path.exists(target_file):
             try:
-                with open(history_file, 'r', encoding='utf-8') as f:
-                    items = json.load(f)
-                    if not isinstance(items, list):
-                        items = []
+                with open(target_file, 'r', encoding='utf-8') as f:
+                    raw_items = json.load(f)
+                    if isinstance(raw_items, list):
+                        for item in raw_items:
+                            if not isinstance(item, dict):
+                                continue
+                            item_is_paper = item.get('is_paper', config.paper_trading)
+                            item['is_paper'] = item_is_paper
+                            items.append(item)
             except Exception as e:
-                logger.error(f"Error loading trade_history.json: {e}")
+                logger.error(f"Error loading {target_file}: {e}")
+
+        # If targeted mode history is empty, import filled trades from legacy trade_history.json
+        if not items and os.path.exists(legacy_file) and target_file != legacy_file:
+            try:
+                with open(legacy_file, 'r', encoding='utf-8') as f:
+                    raw_items = json.load(f)
+                    if isinstance(raw_items, list):
+                        for item in raw_items:
+                            if isinstance(item, dict):
+                                item['is_paper'] = config.paper_trading
+                                items.append(item)
+            except Exception as e:
+                logger.error(f"Error importing legacy trade history: {e}")
+
+        if target_file == legacy_file and config.paper_trading and items:
+            try:
+                with open(history_file, 'w', encoding='utf-8') as f:
+                    json.dump(items, f, indent=2)
+            except Exception as e:
+                logger.error(f"Error migrating legacy trade history: {e}")
+
         return deque(items, maxlen=500)
 
     def _save_trade_history(self) -> None:
         data_dir = os.path.join(os.path.dirname(__file__), "data")
         os.makedirs(data_dir, exist_ok=True)
-        history_file = os.path.join(data_dir, "trade_history.json")
+        file_name = "paper_trade_history.json" if config.paper_trading else "live_trade_history.json"
+        history_file = os.path.join(data_dir, file_name)
         try:
+            for item in self.trade_actions:
+                if isinstance(item, dict):
+                    item['is_paper'] = config.paper_trading
             with open(history_file, 'w', encoding='utf-8') as f:
                 json.dump(list(self.trade_actions), f, indent=2)
         except Exception as e:
-            logger.error(f"Error saving trade_history.json: {e}")
-        
-        # Trading active flag
-        self.trading_active = True
-        
-        # Initialize Telegram
-        self.telegram = TelegramInterface(
-            get_status_fn=self.get_bot_status_str,
-            get_balance_fn=self.get_balance_str
-        )
+            logger.error(f"Error saving {file_name}: {e}")
 
     def _load_positions(self) -> list:
         data_dir = os.path.join(os.path.dirname(__file__), "data")
@@ -251,19 +307,7 @@ class TradingBot:
 
         self._save_positions()
 
-    def _save_positions(self) -> None:
-        pos_dir = os.path.join(os.path.dirname(__file__), "data")
-        os.makedirs(pos_dir, exist_ok=True)
-        pos_file = os.path.join(pos_dir, "position.json")
-        try:
-            for p in self.active_positions:
-                p['is_paper'] = config.paper_trading
-                if 'entry_time' not in p or not p['entry_time']:
-                    p['entry_time'] = time.time()
-            with open(pos_file, 'w', encoding='utf-8') as f:
-                json.dump(self.active_positions, f, indent=2)
-        except Exception as e:
-            logger.error(f"Error saving position.json: {e}")
+
 
     def _find_position(self, symbol: str) -> Optional[Dict[str, Any]]:
         for p in self.active_positions:
@@ -328,6 +372,155 @@ class TradingBot:
             logger.debug(f"BTC shield check skipped: {e}")
         return False
 
+    def get_trade_statistics(self, limit: int = 15) -> Dict[str, Any]:
+        """Calculates statistics for recent filled trades (Win Rate, Total PnL, consecutive losses, worst coin)."""
+        filled_sells = [
+            t for t in self.trade_actions 
+            if isinstance(t, dict) and t.get('side') == 'SELL' and t.get('status') == 'FILLED'
+        ]
+        recent = filled_sells[:limit]
+        total_trades = len(recent)
+        
+        if total_trades == 0:
+            return {
+                'total_trades': 0,
+                'win_rate': 0.0,
+                'total_pnl_usdt': 0.0,
+                'total_pnl_pct': 0.0,
+                'consecutive_losses': 0,
+                'worst_symbol': 'N/A',
+                'worst_pnl_usdt': 0.0,
+                'recent_trades_summary': 'Немає закритої історії угод'
+            }
+        
+        wins = sum(1 for t in recent if float(t.get('pnl_usdt', 0.0) or 0.0) > 0)
+        win_rate = (wins / total_trades) * 100.0
+        total_pnl_usdt = sum(float(t.get('pnl_usdt', 0.0) or 0.0) for t in recent)
+        total_pnl_pct = sum(float(t.get('pnl_pct', 0.0) or 0.0) for t in recent)
+        
+        consecutive_losses = 0
+        for t in recent:
+            pnl_u = float(t.get('pnl_usdt', 0.0) or 0.0)
+            if pnl_u < 0:
+                consecutive_losses += 1
+            else:
+                break
+                
+        coin_pnl = {}
+        for t in recent:
+            sym = t.get('symbol', 'UNKNOWN')
+            coin_pnl[sym] = coin_pnl.get(sym, 0.0) + float(t.get('pnl_usdt', 0.0) or 0.0)
+        
+        worst_sym = min(coin_pnl, key=coin_pnl.get) if coin_pnl else 'N/A'
+        worst_pnl = coin_pnl.get(worst_sym, 0.0) if coin_pnl else 0.0
+        
+        summary_lines = []
+        for t in recent[:8]:
+            sym = t.get('symbol', '?')
+            pnl_pct = float(t.get('pnl_pct', 0.0) or 0.0)
+            pnl_u = float(t.get('pnl_usdt', 0.0) or 0.0)
+            r = t.get('reason', '')
+            summary_lines.append(f"- {sym}: PnL {pnl_pct:+.2f}% (${pnl_u:+.4f}) [{r}]")
+            
+        recent_summary = "\n".join(summary_lines)
+        
+        return {
+            'total_trades': total_trades,
+            'win_rate': round(win_rate, 1),
+            'total_pnl_usdt': round(total_pnl_usdt, 4),
+            'total_pnl_pct': round(total_pnl_pct, 2),
+            'consecutive_losses': consecutive_losses,
+            'worst_symbol': worst_sym,
+            'worst_pnl_usdt': round(worst_pnl, 4),
+            'recent_trades_summary': recent_summary
+        }
+
+    async def run_ai_risk_manager_briefing(self, force: bool = False) -> Dict[str, Any]:
+        """
+        Executes AI Chief Risk Manager review ("Ранковий Брифінг").
+        Triggered periodically (every 24h), after every 10 trades, or on manual request.
+        Sets Market Regime: ATTACK, CAUTION, or DEFENSE.
+        """
+        now = time.time()
+        time_since_last = now - getattr(config, 'last_briefing_time', 0.0)
+        trades_count = getattr(config, 'trades_since_last_briefing', 0)
+        
+        if not force and time_since_last < 7200 and trades_count < 5:
+            return {
+                'status': 'SKIPPED',
+                'reason': f'Брифінг не потрібен (минуло {time_since_last/3600:.1f} год, угод з останнього брифінгу: {trades_count}/5)',
+                'regime': getattr(config, 'current_ai_regime', 'ATTACK')
+            }
+
+        logger.info("🧠 Launching AI Pilot Statistical Briefing ('Ранковий Брифінг')...")
+        stats = self.get_trade_statistics(limit=15)
+        
+        regime, reason, adj = await self.llm_analyst.evaluate_market_regime(stats)
+        
+        old_regime = getattr(config, 'current_ai_regime', 'ATTACK')
+        config.current_ai_regime = regime
+        config.ai_regime_reason = reason
+        config.last_briefing_time = now
+        config.trades_since_last_briefing = 0
+        config.save_persisted_config()
+        
+        try:
+            os.makedirs("data", exist_ok=True)
+            with open("data/ai_regime_state.json", "w", encoding="utf-8") as f:
+                json.dump({
+                    "timestamp": now,
+                    "regime": regime,
+                    "reason": reason,
+                    "stats": stats,
+                    "adjustments": adj
+                }, f, indent=2, ensure_ascii=False)
+        except Exception:
+            pass
+
+        if regime == "DEFENSE":
+            config.defense_paused_until = now + (2 * 3600)  # 2-hour trading pause
+            config.save_persisted_config()
+            logger.warning(f"🔴 AI PILOT ACTIVATED DEFENSE MODE: {reason}")
+            
+            positions_to_close = list(self.active_positions)
+            for pos in positions_to_close:
+                sym = pos.get('symbol')
+                if sym:
+                    await self.close_position_market(sym, f"🛡️ DEFENSE MODE ACTIVATED ({reason})")
+                    
+            await self.telegram.send_alert(
+                f"🛡️ *AI PILOT: DEFENSE MODE ACTIVATED*\n"
+                f"• Режим: `🔴 DEFENSE` (Захист капіталу)\n"
+                f"• Причина: `{reason}`\n"
+                f"• Дія: Повна зупинка торгівлі, вихід у USDT на 2 години."
+            )
+            
+        elif regime == "CAUTION":
+            logger.warning(f"🟡 AI RISK MANAGER ACTIVATED CAUTION MODE: {reason}")
+            await self.telegram.send_alert(
+                f"🟡 *AI RISK MANAGER: CAUTION MODE ACTIVATED*\n"
+                f"• Режим: `🟡 CAUTION` (Обережно)\n"
+                f"• Причина: `{reason}`\n"
+                f"• Дія: Торгівлю обмежено ТІЛЬКИ Top-5 Blue Chips (BTC, ETH, BNB, SOL, XRP). Ціль TP: +0.8%."
+            )
+        else:
+            logger.info(f"🟢 AI RISK MANAGER ACTIVATED ATTACK MODE: {reason}")
+            if old_regime != "ATTACK":
+                await self.telegram.send_alert(
+                    f"🟢 *AI RISK MANAGER: ATTACK MODE ACTIVATED*\n"
+                    f"• Режим: `🟢 ATTACK` (Нормальна торгівля)\n"
+                    f"• Причина: `{reason}`\n"
+                    f"• Дія: Торгівлю волатильними альткоїнами (Top-25) відновлено."
+                )
+
+        return {
+            'status': 'SUCCESS',
+            'regime': regime,
+            'reason': reason,
+            'stats': stats,
+            'adjustments': adj
+        }
+
     def check_position_health(self, symbol: str, position: Dict[str, Any], meta: Dict[str, Any]) -> Optional[str]:
         """Decides whether an open position is still worth holding.
 
@@ -349,14 +542,22 @@ class TradingBot:
         ema_slow = float(meta.get('ema_slow', 0) or 0)
         rsi = float(meta.get('rsi', 50) or 50)
 
-        # ⚡ FAST MATH / BREAKOUT SNIPER SPECIAL GUARDIAN:
-        # If position was opened on a 0ms Math Breakout pump, it MUST explode into profit immediately.
-        # If after 1.5 minutes (90s) it hasn't gained +0.20% or is in negative PnL, exit IMMEDIATELY!
-        is_breakout_entry = bool(position.get('is_breakout') or '0ms Math' in position.get('entry_reason', '') or 'BREAKOUT' in position.get('entry_reason', ''))
-        if is_breakout_entry:
-            if age_minutes >= 1.5 and pnl_pct < 0.20:
+        entry_reason_upper = str(position.get('entry_reason', '') or position.get('reason', '')).upper()
+        is_breakout = bool(
+            position.get('is_breakout') or
+            '0MS MATH' in entry_reason_upper or
+            'BREAKOUT' in entry_reason_upper or
+            'SNIPER' in entry_reason_upper or
+            'PUMP' in entry_reason_upper
+        )
+        is_dip = bool('DIP' in entry_reason_upper or 'OVERSOLD' in entry_reason_upper or 'ВІДСКОК' in entry_reason_upper)
+
+        # ⚡ FAST MATH / BREAKOUT SNIPER GUARDIAN:
+        # Give breakout trades 15 minutes to unfold. Only exit if after 15m PnL hasn't reached +0.45%.
+        if is_breakout:
+            if age_minutes >= 15.0 and pnl_pct < 0.45:
                 return (f"⚡ FAST MATH BREAKOUT TIMEOUT: Імпульс не вистрілив за {age_minutes:.1f} хв "
-                        f"(PnL: {pnl_pct:+.2f}% < +0.20%), миттєвий вихід для захисту капіталу.")
+                        f"(PnL: {pnl_pct:+.2f}% < +0.45%), вихід для захисту капіталу.")
 
         # Grace period for standard dip-buy entries
         if age_minutes < config.health_min_hold_minutes:
@@ -368,21 +569,17 @@ class TradingBot:
                     f"(EMA{config.ema_fast}={ema_fast:.6f} < EMA{config.ema_slow}={ema_slow:.6f}), PnL: {pnl_pct:+.2f}%")
 
         # Dynamic physics-based stagnation timeout by entry module
-        entry_reason = str(position.get('entry_reason', '') or position.get('reason', '')).upper()
-        is_breakout = bool('BREAKOUT' in entry_reason or position.get('is_breakout', False))
-        is_dip = bool('DIP' in entry_reason or 'OVERSOLD' in entry_reason or 'ВІДСКОК' in entry_reason)
-
         if is_breakout:
-            max_stagnation_time = 10.0  # 10 min for Breakouts (fakeout check)
-            min_required_pnl = 0.30     # Must produce +0.30% momentum
+            max_stagnation_time = 20.0  # 20 min for Breakouts (gives price room to breathe)
+            min_required_pnl = 0.50     # Must produce +0.50% momentum (net gain after fees)
             module_name = "BREAKOUT"
         elif is_dip:
-            max_stagnation_time = 25.0  # 25 min for Dip Reversals (liquidity accumulation)
-            min_required_pnl = 0.20     # Lower threshold for bottom bounces
+            max_stagnation_time = 30.0  # 30 min for Dip Reversals (liquidity accumulation)
+            min_required_pnl = 0.45     # Net profit after exchange fees (+0.45%)
             module_name = "DIP_REVERSAL"
         else:
-            max_stagnation_time = 15.0  # Standard fallback
-            min_required_pnl = 0.20
+            max_stagnation_time = 25.0  # Standard fallback
+            min_required_pnl = 0.45
             module_name = "STANDARD"
 
         # Module-Specific Micro-Profit Exit: If after max_stagnation_time PnL >= min_required_pnl, lock in profit!
@@ -394,8 +591,8 @@ class TradingBot:
             return (f"⏰ {module_name} STAGNATION EXIT ({max_stagnation_time:.0f} хв): Позиція не виросла вище +{min_required_pnl:.2f}% "
                     f"за {age_minutes:.1f} хв (PnL: {pnl_pct:+.2f}%), вивільняємо депозит для нових угод.")
 
-        # RSI overheated while in profit — bank it before the pullback (non-breakout trades).
-        if rsi > config.health_rsi_overheat and pnl_pct > 0 and not is_breakout:
+        # RSI overheated while in net profit (>= +0.45%) — bank it before the pullback (non-breakout trades).
+        if rsi > config.health_rsi_overheat and pnl_pct >= 0.45 and not is_breakout:
             return f"💰 PROFIT PROTECTION: RSI перегрітий ({rsi:.1f}), фіксуємо прибуток {pnl_pct:+.2f}%"
 
         return None
@@ -410,7 +607,7 @@ class TradingBot:
         """
         if config.paper_trading:
             return {'converted': [], 'skipped': [], 'error': 'Not available in paper trading mode'}
-        if not hasattr(self.exchange, 'fetch_convert_candidates'):
+        if not getattr(self.exchange, 'supports_convert', False):
             return {'converted': [], 'skipped': [], 'error': 'Convert not supported on this exchange'}
 
         min_sellable = getattr(config, 'min_order_usdt', 5.5)
@@ -498,9 +695,13 @@ class TradingBot:
             logger.error(f"SELL order rejected for {symbol}: {order_err}")
 
         if status == 'FILLED':
-            self.trade_actions.appendleft({
+            entry_time_val = target_pos.get('entry_time') if 'target_pos' in locals() and isinstance(target_pos, dict) else None
+            entry_time_str = time.strftime("%H:%M:%S", time.localtime(entry_time_val)) if entry_time_val and entry_time_val < 1e11 else (time.strftime("%H:%M:%S", time.localtime(entry_time_val / 1000)) if entry_time_val else time.strftime("%H:%M:%S"))
+
+            closed_record = {
                 'timestamp': int(time.time() * 1000),
                 'time': time.strftime("%H:%M:%S"),
+                'entry_time': entry_time_str,
                 'symbol': symbol,
                 'side': 'SELL',
                 'amount': amount,
@@ -510,8 +711,15 @@ class TradingBot:
                 'pnl_usdt': round((current_price - entry_price) * amount, 4),
                 'reason': reason,
                 'status': 'FILLED'
-            })
+            }
+            self.trade_actions.appendleft(closed_record)
             self._save_trade_history()
+            asyncio.create_task(self.llm_analyst.analyze_closed_trade(closed_record))
+
+            config.trades_since_last_briefing = getattr(config, 'trades_since_last_briefing', 0) + 1
+            config.save_persisted_config()
+            if config.trades_since_last_briefing >= 5:
+                asyncio.create_task(self.run_ai_risk_manager_briefing())
 
         if status == 'EXCHANGE_REJECTED':
             is_precision_or_balance_error = any(
@@ -543,12 +751,12 @@ class TradingBot:
             'trend': meta.get('trend', 'UNKNOWN')
         })
 
-        # Feature 1: 45-Minute Symbol Lock for Stagnation, Emergency exits or non-profit exits (< +0.10%)
-        if 'STAGNATION' in reason.upper() or 'EMERGENCY' in reason.upper() or 'TIMEOUT' in reason.upper() or pnl_pct < 0.0010:
+        # Mandatory Symbol Lock: 45 minutes for stagnation / emergency / timeout / PnL < +0.45% exits, 30 minutes for normal exits
+        if 'STAGNATION' in reason.upper() or 'EMERGENCY' in reason.upper() or 'TIMEOUT' in reason.upper() or pnl_pct < 0.45:
             effective_cooldown = 45  # 45 minutes symbol lock
             logger.info(f"🔒 {symbol} заблоковано на 45 хв через невдалий/флетовий вихід ({reason}).")
         else:
-            effective_cooldown = max(cooldown_minutes, 20)  # 20 minutes for normal exits
+            effective_cooldown = max(cooldown_minutes, 30)  # 30 minutes minimum for normal exits
             logger.info(f"🔒 {symbol} заблоковано на {effective_cooldown} хв після виходу.")
 
         self.rejected_cooldowns[symbol] = time.time() + (effective_cooldown * 60)
@@ -571,6 +779,39 @@ class TradingBot:
 
         return True, f"Position {symbol} sold at ${current_price:.6f} (PnL: {pnl_pct:+.2f}%)"
 
+    async def ingest_existing_trade_history_and_train(self) -> None:
+        """
+        Ingests completed trades from trade_history.json into AI learning memory,
+        extracting AI post-mortem lessons for all historical completed trades.
+        """
+        filled_sells = [
+            t for t in self.trade_actions 
+            if isinstance(t, dict) and t.get('side') == 'SELL' and t.get('status') == 'FILLED'
+        ]
+        if not filled_sells:
+            return
+
+        # Check existing lessons to avoid duplicate calls
+        data_dir = os.path.join(os.path.dirname(__file__), "data")
+        mem_file = os.path.join(data_dir, "ai_learning_memory.json")
+        existing_symbols = set()
+        if os.path.exists(mem_file):
+            try:
+                with open(mem_file, "r", encoding="utf-8") as f:
+                    lessons = json.load(f)
+                    existing_symbols = {l.get('symbol') for l in lessons if isinstance(l, dict)}
+            except Exception:
+                pass
+
+        # Ingest top 10 recent completed trades into AI learning memory
+        unprocessed = [t for t in filled_sells[:10] if t.get('symbol') not in existing_symbols]
+        for t in unprocessed:
+            try:
+                await self.llm_analyst.analyze_closed_trade(t)
+                await asyncio.sleep(0.5)
+            except Exception as e:
+                logger.debug(f"Historical trade ingestion error: {e}")
+
     async def run_loop(self):
         logger.info("🚀 Starting Bybit Trading Bot loop...")
         await self.telegram.send_alert(
@@ -583,6 +824,14 @@ class TradingBot:
 
         import time
         self.last_heartbeat = time.time()
+
+        # Ingest historical trade history and trigger immediate AI Risk Manager briefing on startup
+        try:
+            logger.info("🧠 Ingesting historical trade records & executing initial AI Risk Manager briefing...")
+            await self.ingest_existing_trade_history_and_train()
+            await self.run_ai_risk_manager_briefing(force=True)
+        except Exception as init_briefing_err:
+            logger.warning(f"Initial AI Risk Manager briefing error: {init_briefing_err}")
 
         # Force cancel all resting open orders on any coins to unlock locked balance on CEX
         if not config.paper_trading:
@@ -628,8 +877,21 @@ class TradingBot:
                     await asyncio.sleep(5)
                     continue
 
+                # 🛡️ DEFENSE Mode check: If DEFENSE mode is active and there are no active positions, pause buy scanning
+                if time.time() < getattr(config, 'defense_paused_until', 0.0):
+                    pause_left_min = int((config.defense_paused_until - time.time()) / 60)
+                    if not hasattr(self, '_logged_defense_pause') or self._logged_defense_pause != pause_left_min:
+                        logger.info(f"🛡️ DEFENSE Mode active: Trading paused for capital protection ({pause_left_min} min remaining).")
+                        self._logged_defense_pause = pause_left_min
+                    if not self.active_positions:
+                        await asyncio.sleep(10)
+                        continue
+
+                # 🟡 CAUTION Mode check: Restrict trading strictly to Top-5 Blue Chips (BTC, ETH, BNB, SOL, XRP)
+                if getattr(config, 'current_ai_regime', 'ATTACK') == "CAUTION":
+                    symbols_to_scan = list(getattr(config, 'top5_blue_chips', ["BTC/USDT", "ETH/USDT", "BNB/USDT", "SOL/USDT", "XRP/USDT"]))
                 # Determine pairs to scan (Always scan top hot pairs to enable live screener feed and Auto-Swap rotation)
-                if config.symbol == "AUTO" or getattr(config, 'use_dynamic_market_screener', False):
+                elif config.symbol == "AUTO" or getattr(config, 'use_dynamic_market_screener', False):
                     try:
                         symbols_to_scan = self.exchange.fetch_dynamic_hot_pairs(min_volume=1000000.0, limit=15)
                     except Exception as screener_err:
@@ -710,47 +972,27 @@ class TradingBot:
                         self.scan_logs.appendleft(scan_entry)
                         logger.info(f"[{sym} ${meta.get('price', 0):.4f}] Signal: {signal} | Reason: {reason}")
 
-                        # Adaptive position management: bail out early if the conditions we
-                        # entered on no longer hold, before TP/SL has a chance to trigger.
-                        if pos_for_sym and signal != 'SELL':
-                            health_reason = self.check_position_health(sym, pos_for_sym, meta)
-                            if not health_reason:
-                                entry_t = float(pos_for_sym.get('entry_time', time.time()))
-                                age_m = (time.time() - entry_t) / 60.0
-                                entry_p = float(pos_for_sym.get('entry_price', 0) or meta.get('price', 0))
-                                curr_p = float(meta.get('price', 0) or entry_p)
-                                pnl = ((curr_p - entry_p) / entry_p * 100.0) if entry_p > 0 else 0.0
-                                if age_m >= 5.0:
-                                    entry_reason_str = str(pos_for_sym.get('reason') or pos_for_sym.get('entry_reason') or 'DIP_REVERSAL')
-                                    should_llm_exit, llm_health_msg = await self.llm_analyst.evaluate_active_position_health(
-                                        sym, config.timeframe, meta, age_m, pnl, entry_reason=entry_reason_str
-                                    )
-                                    if should_llm_exit:
-                                        health_reason = llm_health_msg
-
-                            if health_reason:
-                                logger.warning(f"[{sym}] {health_reason}")
-                                await self.close_position_market(
-                                    sym, health_reason,
-                                    cooldown_minutes=config.emergency_exit_cooldown_minutes
-                                )
-                                break
+                        # Active positions exit ONLY on quantitative strategy signals (Take Profit, Stop Loss, Trailing Stop)
 
                         if signal == 'BUY' and not pos_for_sym and getattr(config, 'monitor_only', False):
                             suppressed_buys.append(sym)
 
                         if signal == 'BUY' and not pos_for_sym and not getattr(config, 'monitor_only', False):
+                            if now < self.rejected_cooldowns.get(sym, 0):
+                                cd_left = int((self.rejected_cooldowns[sym] - now) / 60)
+                                scan_entry['signal'] = 'REJECTED'
+                                scan_entry['reason'] = f"🔒 COOLDOWN LOCK ({cd_left}m remaining) | {reason}"
+                                logger.info(f"🔒 Skipped BUY candidate {sym}: Symbol locked in Cooldown for {cd_left} min")
+                                continue
                             if best_buy_opportunity is None or meta.get('rsi', 100) < best_buy_opportunity['meta'].get('rsi', 100):
                                 best_buy_opportunity = {'symbol': sym, 'meta': meta, 'reason': reason}
                         elif signal == 'SELL' and pos_for_sym:
-                            # Stop-loss exits get a shorter cooldown than emergency exits so the
-                            # bot does not immediately re-enter a coin that is actively dumping.
                             is_stop_loss = "STOP LOSS" in reason.upper() or "STOP_LOSS" in reason.upper()
                             if is_stop_loss:
-                                logger.warning(f"🛑 STOP-LOSS HIT on {sym}. Symbol cooldown activated for 15 minutes.")
+                                logger.warning(f"🛑 STOP-LOSS HIT on {sym}. Symbol cooldown activated for 45 minutes.")
                             await self.close_position_market(
                                 sym, reason,
-                                cooldown_minutes=15 if is_stop_loss else 0
+                                cooldown_minutes=45 if is_stop_loss else 30
                             )
                             break
                     except Exception as scan_err:
@@ -818,6 +1060,23 @@ class TradingBot:
                         logger.info("🛑 Денний ліміт угод (12/12) вичерпано. Бот переходить у режим очікування до завтра.")
                         self._limit_logged_day = current_day
                     best_buy_opportunity = None
+
+                if best_buy_opportunity:
+                    target_sym = best_buy_opportunity['symbol']
+                    if now < self.rejected_cooldowns.get(target_sym, 0):
+                        cd_left = int((self.rejected_cooldowns[target_sym] - now) / 60)
+                        cd_msg = f"🔒 COOLDOWN LOCK: {target_sym} заблоковано ще на {cd_left} хв після закриття угоди."
+                        logger.info(cd_msg)
+                        self.scan_logs.appendleft({
+                            'time': time.strftime("%H:%M:%S"),
+                            'symbol': target_sym,
+                            'price': best_buy_opportunity['meta'].get('price', 0.0),
+                            'signal': 'REJECTED',
+                            'reason': cd_msg,
+                            'rsi': best_buy_opportunity['meta'].get('rsi', 0.0),
+                            'trend': best_buy_opportunity['meta'].get('trend', 'UNKNOWN')
+                        })
+                        best_buy_opportunity = None
 
                 if best_buy_opportunity:
                     target_sym = best_buy_opportunity['symbol']
@@ -932,6 +1191,20 @@ class TradingBot:
 
                     # Only proceed to buy if we have room (either from swap or under max)
                     if len(self.active_positions) >= self.max_concurrent_positions:
+                        pos_limit_msg = f"⚠️ RiskManager: Досягнуто ліміту активних позицій ({len(self.active_positions)}/{self.max_concurrent_positions})"
+                        logger.warning(f"🛑 BUY candidate {target_sym} dropped: {pos_limit_msg}")
+                        verdict_record['status'] = 'RISK_REJECTED'
+                        verdict_record['reason'] += f" | {pos_limit_msg}"
+                        self._save_ai_verdicts()
+                        self.scan_logs.appendleft({
+                            'time': time.strftime("%H:%M:%S"),
+                            'symbol': target_sym,
+                            'price': target_meta.get('price', 0.0),
+                            'signal': 'REJECTED',
+                            'reason': pos_limit_msg,
+                            'rsi': target_meta.get('rsi', 0.0),
+                            'trend': target_meta.get('trend', 'UNKNOWN')
+                        })
                         continue
 
                     usdt_free = 0.0
@@ -1017,11 +1290,24 @@ class TradingBot:
                         except Exception as order_err:
                             verdict_record['status'] = 'EXCHANGE_REJECTED'
                             verdict_record['reason'] += f" | ⚠️ Exchange Error: {order_err}"
+                            self._save_ai_verdicts()
                             logger.error(f"Exchange Order Execution Error for {target_sym}: {order_err}")
                             await self.telegram.send_alert(f"⚠️ *Exchange Order Rejected*: {order_err}")
                     else:
+                        risk_rej_msg = f"⚠️ RiskManager: {risk_reason}"
                         verdict_record['status'] = 'RISK_REJECTED'
-                        verdict_record['reason'] += f" | ⚠️ RiskManager: {risk_reason}"
+                        verdict_record['reason'] += f" | {risk_rej_msg}"
+                        self._save_ai_verdicts()
+                        logger.warning(f"🛑 BUY candidate {target_sym} dropped by RiskManager: {risk_rej_msg}")
+                        self.scan_logs.appendleft({
+                            'time': time.strftime("%H:%M:%S"),
+                            'symbol': target_sym,
+                            'price': target_meta.get('price', 0.0),
+                            'signal': 'REJECTED',
+                            'reason': risk_rej_msg,
+                            'rsi': target_meta.get('rsi', 0.0),
+                            'trend': target_meta.get('trend', 'UNKNOWN')
+                        })
                         logger.warning(f"BUY rejected by RiskManager for {target_sym}: {risk_reason}")
 
             except Exception as e:

@@ -16,6 +16,8 @@ logger = logging.getLogger(__name__)
 class BybitExchangeAdapter(BaseExchangeAdapter):
     """Adapter for Bybit Spot Exchange."""
 
+    supports_convert = True
+
     def __init__(self, api_key: str = "", api_secret: str = ""):
         key = api_key or config.bybit_api_key.strip()
         secret = api_secret or config.bybit_api_secret.strip()
@@ -95,40 +97,6 @@ class BybitExchangeAdapter(BaseExchangeAdapter):
 
     def fetch_ticker(self, symbol: str) -> Dict[str, Any]:
         return self.exchange.fetch_ticker(symbol)
-
-    def _verify_filled(self, order: Dict[str, Any], symbol: str) -> Dict[str, Any]:
-        """Confirms an order was not rejected by the matching engine.
-
-        Bybit acks an order over REST (retCode 0) and only then rejects it asynchronously,
-        so a successful create_order() call is not proof of execution. Without this check a
-        rejected order looks identical to a filled one and the bot drops the position from
-        tracking while the coins are still sitting in the wallet.
-        """
-        order_id = order.get('id') or order.get('info', {}).get('orderId')
-        if not order_id:
-            return order
-
-        for attempt in range(3):
-            time.sleep(0.4)
-            try:
-                fetched = self.exchange.fetch_order(order_id, symbol)
-            except Exception as e:
-                logger.debug(f"Could not verify order {order_id} (attempt {attempt + 1}): {e}")
-                continue
-
-            raw = fetched.get('info', {}) or {}
-            status = (raw.get('orderStatus') or fetched.get('status') or '').lower()
-            filled = float(fetched.get('filled') or raw.get('cumExecQty') or 0)
-
-            if status in ('rejected', 'cancelled', 'canceled') and filled <= 0:
-                reject_reason = raw.get('rejectReason') or status
-                raise Exception(f"Order {order_id} rejected by exchange: {reject_reason}")
-            if filled > 0 or status in ('filled', 'closed'):
-                return fetched
-            # Still 'new'/'partiallyfilled' — resting in the book, treat as live.
-            return fetched
-
-        return order
 
     def create_spot_order(self, symbol: str, order_type: str, side: str, amount: float, price: float) -> Dict[str, Any]:
         try:

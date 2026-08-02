@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>CryptoNasua — Private Trading Dashboard</title>
-    <link rel="stylesheet" href="/static/style.css?v=20260730_v6">
+    <link rel="stylesheet" href="/static/style.css?v=20260730_v7">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
@@ -128,6 +128,27 @@
             </div>
         </section>
 
+        <!-- AI Chief Risk Manager Widget (Regime Switching & Statistical Feedback) -->
+        <section class="glass-card" style="margin-bottom: 20px; padding: 16px 20px; background: rgba(15, 23, 42, 0.7); border: 1px solid rgba(167, 139, 250, 0.3); border-radius: 16px; display: flex; justify-content: space-between; align-items: center;">
+            <div style="flex: 1; padding-right: 15px;">
+                <div style="font-size: 0.82rem; color: #94a3b8; font-weight: bold; display: flex; align-items: center; gap: 8px;">
+                    🧠 AI Chief Risk Manager <span id="ai-regime-badge" class="badge" style="background: #22c55e; color: #fff; font-size: 0.72rem; padding: 3px 8px; border-radius: 6px; font-weight: bold;">🟢 ATTACK MODE</span>
+                </div>
+                <div id="ai-regime-reason" style="font-size: 0.9rem; margin-top: 6px; color: #f1f5f9; font-weight: 500; line-height: 1.4;">
+                    🟢 Ранковий брифінг: Торгівля волатильними альткоїнами дозволена (Win Rate: --%)
+                </div>
+                <div id="ai-learning-insight" style="font-size: 0.82rem; margin-top: 4px; color: #c084fc; font-weight: 500;">
+                    🎓 Навчальний висновок ШІ: Модуль авто-навчання активовано. Очікуємо закритих угод для аналізу.
+                </div>
+                <div id="ai-regime-sub" style="font-size: 0.78rem; margin-top: 4px; color: #64748b;">
+                    Win Rate: <span id="ai-win-rate" style="color:#e2e8f0; font-weight:600;">--%</span> | Послідовні стопи: <span id="ai-consec-stops" style="color:#e2e8f0; font-weight:600;">0</span> | PnL: <span id="ai-total-pnl" style="color:#48bb78; font-weight:600;">$0.00</span>
+                </div>
+            </div>
+            <button id="btn-trigger-ai-briefing" class="btn btn-sm btn-primary" style="padding: 8px 16px; font-size: 0.82rem; white-space: nowrap; display: flex; align-items: center; gap: 6px; background: linear-gradient(135deg, #7c3aed, #4f46e5); border: none; box-shadow: 0 4px 12px rgba(124, 58, 237, 0.4);">
+                🧠 Ранковий Брифінг
+            </button>
+        </section>
+
         <!-- Active Positions Grid -->
         <section class="glass-card section-card" style="margin-bottom: 20px;">
             <h3>📌 Активні Позиції <span id="positions-count-badge" class="badge badge-paper" style="font-size:0.7rem;">0</span></h3>
@@ -206,18 +227,18 @@
                     <table style="width: 100%; border-collapse: collapse; text-align: left; font-size: 0.82rem;">
                         <thead style="position: sticky; top: 0; background: #1a202c; z-index: 10; border-bottom: 1px solid rgba(255,255,255,0.12);">
                             <tr style="color: var(--text-muted); font-size: 0.74rem; text-transform: uppercase;">
-                                <th style="padding: 8px 10px; min-width:65px;">Час</th>
-                                <th style="padding: 8px 10px; min-width:80px;">Монета</th>
-                                <th style="padding: 8px 10px; min-width:55px;">Тип</th>
-                                <th style="padding: 8px 10px; min-width:70px;">К-сть</th>
-                                <th style="padding: 8px 10px; min-width:110px;">Ціна</th>
-                                <th style="padding: 8px 10px; min-width:80px;">PnL (%)</th>
-                                <th style="padding: 8px 10px;">Причина</th>
+                                <th style="padding: 8px 10px; min-width:85px;">Час Входу</th>
+                                <th style="padding: 8px 10px; min-width:90px;">Монета</th>
+                                <th style="padding: 8px 10px; min-width:90px;">Ціна Входу</th>
+                                <th style="padding: 8px 10px; min-width:90px;">Ціна Виходу</th>
+                                <th style="padding: 8px 10px; min-width:75px;">Кількість</th>
+                                <th style="padding: 8px 10px; min-width:105px;">PnL (%)</th>
+                                <th style="padding: 8px 10px;">Причина Виходу</th>
                             </tr>
                         </thead>
                         <tbody id="history-table-body">
                             <tr>
-                                <td colspan="6" class="empty-positions" style="text-align:center; padding: 20px; color: var(--text-muted);">
+                                <td colspan="7" class="empty-positions" style="text-align:center; padding: 20px; color: var(--text-muted);">
                                     Очікування перших закритих угод...
                                 </td>
                             </tr>
