@@ -23,13 +23,20 @@ class TradingConfig:
     jwt_secret: str = os.getenv("JWT_SECRET", "super-secret-crypto-bot-key-2026")
     dashboard_port: int = int(os.getenv("DASHBOARD_PORT", "5000"))
 
-    # LLM Confirmation Filter (Gemini / OpenAI / DeepSeek / OpenRouter)
+    # LLM Confirmation Filter (Gemini / OpenAI / DeepSeek / Kimi-Moonshot / OpenRouter)
     use_llm_confirmation: bool = os.getenv("USE_LLM_CONFIRMATION", "false").lower() == "true"
     llm_api_key: str = os.getenv("LLM_API_KEY", "")
-    llm_provider: str = os.getenv("LLM_PROVIDER", "gemini").lower()  # gemini, openai, deepseek
+    llm_provider: str = os.getenv("LLM_PROVIDER", "gemini").lower()  # gemini, openai, deepseek, kimi, moonshot
     deepseek_api_key: str = os.getenv("DEEPSEEK_API_KEY", os.getenv("LLM_API_KEY", ""))
     deepseek_model: str = os.getenv("DEEPSEEK_MODEL", "deepseek-chat")
+    moonshot_api_key: str = os.getenv("MOONSHOT_API_KEY", "")
+    moonshot_model: str = os.getenv("MOONSHOT_MODEL", "kimi-k1.5")
+    moonshot_base_url: str = os.getenv("MOONSHOT_BASE_URL", "https://api.moonshot.cn/v1")
     trading_mode: str = os.getenv("TRADING_MODE", "chill").lower()  # chill (sniper 90%) or hunt (aggressor 60%)
+
+    @property
+    def supported_llm_providers(self) -> tuple:
+        return ("kimi", "moonshot", "deepseek", "gemini", "openai")
 
     @property
     def min_llm_confidence(self) -> float:
@@ -58,8 +65,10 @@ class TradingConfig:
     min_order_usdt: float = 1.0  # Bybit minimum spot order value is ~1 USDT
 
     # Risk Management
-    stop_loss_pct: float = 0.02   # 2.0% Stop Loss
+    stop_loss_pct: float = 0.02   # 2.0% hard Stop Loss (never movable towards increased loss)
     take_profit_pct: float = 0.035 # 3.5% Take Profit
+    trailing_stop_activation_pct: float = 0.025  # activate trailing stop at +2.5% gain
+    trailing_stop_distance_pct: float = 0.015    # trailing stop 1.5% below peak
     max_daily_loss_pct: float = 0.10 # Stop trading if 10% lost in 24h
 
     # Strategy Parameters (Micro-Grid + RSI / EMA)

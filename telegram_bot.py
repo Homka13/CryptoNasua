@@ -86,14 +86,14 @@ class TelegramInterface:
     async def _cmd_status(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         if not self._is_authorized(update):
             return
-        msg = self._build_status_msg()
+        msg = await self._build_status_msg()
         if update.message:
             await update.message.reply_text(msg, parse_mode="Markdown")
 
     async def _cmd_balance(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         if not self._is_authorized(update):
             return
-        msg = self._build_balance_msg()
+        msg = await self._build_balance_msg()
         if update.message:
             await update.message.reply_text(msg, parse_mode="Markdown")
 
@@ -143,9 +143,9 @@ class TelegramInterface:
         await query.answer()
 
         if query.data == "status":
-            await query.edit_message_text(self._build_status_msg(), parse_mode="Markdown")
+            await query.edit_message_text(await self._build_status_msg(), parse_mode="Markdown")
         elif query.data == "balance":
-            await query.edit_message_text(self._build_balance_msg(), parse_mode="Markdown")
+            await query.edit_message_text(await self._build_balance_msg(), parse_mode="Markdown")
         elif query.data == "mode_chill":
             config.trading_mode = "chill"
             logger.info("Trading mode changed to CHILL via Telegram button")
@@ -179,14 +179,20 @@ class TelegramInterface:
             self.is_active = True
             await query.edit_message_text("▶️ *Bot trading resumed.*", parse_mode="Markdown")
 
-    def _build_status_msg(self) -> str:
+    async def _build_status_msg(self) -> str:
         if self.get_status_fn:
-            return self.get_status_fn()
+            result = self.get_status_fn()
+            if asyncio.iscoroutine(result):
+                result = await result
+            return result
         return "📊 *Status*: Bot running smoothly."
 
-    def _build_balance_msg(self) -> str:
+    async def _build_balance_msg(self) -> str:
         if self.get_balance_fn:
-            return self.get_balance_fn()
+            result = self.get_balance_fn()
+            if asyncio.iscoroutine(result):
+                result = await result
+            return result
         return "💰 *Balance*: Initial $10.00 USDT"
 
     async def send_alert(self, text: str):

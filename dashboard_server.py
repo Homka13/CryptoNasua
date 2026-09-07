@@ -74,6 +74,17 @@ class DashboardServer:
         except Exception as e:
             return web.json_response({'success': False, 'error': str(e)}, status=400)
 
+    async def _swap_exchange(self) -> None:
+        """Rebuild the bot's exchange service to reflect a live/paper mode change."""
+        from exchange_service import create_exchange_service
+        old = self.bot.exchange
+        self.bot.exchange = create_exchange_service()
+        if old is not None:
+            try:
+                await old.close()
+            except Exception as e:
+                logger.warning(f"Error closing old exchange: {e}")
+
     def _verify_session(self, request: web.Request) -> bool:
         auth_header = request.headers.get('Authorization', '')
         token = auth_header.replace('Bearer ', '').strip()
@@ -87,7 +98,7 @@ class DashboardServer:
 
         meta = self.bot.latest_meta
         try:
-            bal = self.bot.exchange.fetch_balance()
+            bal = await self.bot.exchange.fetch_balance()
             usdt_free = bal.get('USDT', {}).get('free', 0.0)
             usdt_total = bal.get('USDT', {}).get('total', usdt_free)
             usdt_used = bal.get('USDT', {}).get('used', 0.0)
@@ -99,7 +110,7 @@ class DashboardServer:
         
         real_usdt = None
         try:
-            real_bal = self.bot.exchange.fetch_real_balance()
+            real_bal = await self.bot.exchange.fetch_real_balance()
             if real_bal and 'USDT' in real_bal:
                 real_usdt = real_bal['USDT'].get('total', real_bal['USDT'].get('free', 0.0))
         except Exception:
@@ -162,12 +173,12 @@ class DashboardServer:
                 return web.json_response({'success': True, 'is_active': True})
             elif action == 'toggle_mode':
                 config.paper_trading = not config.paper_trading
-                self.bot.exchange.is_paper = config.paper_trading
+                await self._swap_exchange()
                 return web.json_response({'success': True, 'paper_trading': config.paper_trading})
             elif action == 'set_execution_mode':
                 mode = body.get('mode', 'paper')
                 config.paper_trading = (mode.lower() == 'paper')
-                self.bot.exchange.is_paper = config.paper_trading
+                await self._swap_exchange()
                 logger.info(f"🌐 Execution Mode Switched via Dashboard: {'PAPER TRADING' if config.paper_trading else 'LIVE BYBIT SPOT'}")
                 return web.json_response({'success': True, 'paper_trading': config.paper_trading})
             elif action == 'set_llm_key':
@@ -198,7 +209,7 @@ class DashboardServer:
                 return web.json_response({'success': True, 'symbol': new_symbol})
             elif action == 'set_llm_provider':
                 new_provider = body.get('provider', 'gemini').lower()
-                if new_provider in ('gemini', 'openai', 'deepseek'):
+                if new_provider in config.supported_llm_providers:
                     config.llm_provider = new_provider
                     asyncio.create_task(self.bot.telegram.send_alert(
                         f"🤖 *LLM Sentinel Provider Switched*: `{config.llm_provider.upper()}`"
