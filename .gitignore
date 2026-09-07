@@ -45,3 +45,7 @@ bybit_rsa_*
 # Logs & Database
 *.log
 *.sqlite
+
+# Runtime state (persisted open position)
+position_state.json
+.pytest_cache/

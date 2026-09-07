@@ -3,7 +3,7 @@ import pandas as pd
 from typing import Dict, Any, List
 from config import config
 from strategy import HybridStrategy
-from exchange_service import ExchangeService
+from exchange_service import create_exchange_service
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 logger = logging.getLogger(__name__)
@@ -31,7 +31,10 @@ class Backtester:
             current_price = float(current_row['close'])
             timestamp = current_row['datetime']
 
-            signal, reason, meta = self.strategy.analyze(window, position)
+            result = self.strategy.analyze(window, position)
+            signal = result.signal
+            reason = result.reason
+            meta = result.metadata
 
             if signal == 'BUY' and position is None:
                 if self.capital >= config.min_order_usdt:
@@ -114,11 +117,20 @@ class Backtester:
         }
 
 if __name__ == "__main__":
+    import asyncio
     try:
-        ex = ExchangeService()
-        logger.info(f"Fetching historical 5m candles for {config.symbol}...")
-        df_candles = ex.fetch_ohlcv(symbol=config.symbol, timeframe=config.timeframe, limit=500)
-        tester = Backtester()
-        tester.run(df_candles)
+        async def _run():
+            ex = create_exchange_service()
+            try:
+                logger.info(f"Fetching historical 5m candles for {config.symbol}...")
+                df_candles = await ex.fetch_ohlcv(
+                    symbol=config.symbol, timeframe=config.timeframe, limit=500
+                )
+                tester = Backtester()
+                tester.run(df_candles)
+            finally:
+                await ex.close()
+
+        asyncio.run(_run())
     except Exception as e:
         logger.error(f"Backtest error: {e}")
